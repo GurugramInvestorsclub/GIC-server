@@ -9,7 +9,7 @@ require('dotenv').config();
 const supabase = require('./src/db/supabase');
 
 // Import routes (will be created later)
-const authRoutes = require('./src/routes/auth');
+const authRoutes = require('./src/routes/auth'); // Commented out until needed
 const blogRoutes = require('./src/routes/blog');
 
 // Create Express application
@@ -65,10 +65,10 @@ function setupRoutes() {
         });
     });
 
-    // Mount authentication routes (uncomment when auth routes are created)
-    // app.use('/api/auth', authRoutes);
+    // Mount authentication routes (uncomment when auth routes are ready)
+    app.use('/api/auth', authRoutes);
 
-    // Mount blog routes (uncomment when blog routes are created)
+    // Mount blog routes
     app.use('/api/blogs', blogRoutes);
 
     // Handle 404 errors

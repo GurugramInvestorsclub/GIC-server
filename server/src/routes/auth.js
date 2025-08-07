@@ -30,8 +30,8 @@ router.post('/verify', verifyToken);
 // Returns: Current user details
 router.get('/me', requireAuth, getCurrentUser);
 
-// Route not found handler for this router
-router.use('*', (req, res) => {
+// Route not found handler for this router (Express 5.1.0 compatible)
+router.use((req, res) => {
     res.status(404).json({
         error: 'Auth route not found',
         message: `The auth route ${req.originalUrl} does not exist`,

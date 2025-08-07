@@ -41,8 +41,8 @@ router.put('/:id', requireAuth, updateBlog);
 // DELETE /api/blogs/:id - Delete blog
 router.delete('/:id', requireAuth, deleteBlog);
 
-// Route not found handler for this router
-router.use('*', (req, res) => {
+// Route not found handler for this router (Express 5.1.0 compatible)
+router.use((req, res) => {
     res.status(404).json({
         error: 'Blog route not found',
         message: `The blog route ${req.originalUrl} does not exist`,
