@@ -48,9 +48,10 @@ const Layout = ({ children }) => {
             {/* Left side - Logo and title */}
             <div className="flex items-center space-x-4">
               <div className="flex-shrink-0">
-                <h1 className="text-2xl font-bold text-black">
+                {/* <h1 className="text-2xl font-bold text-black">
                   GIC Admin
-                </h1>
+                </h1> */}
+                <img src="/Logo.png" alt="Logo" className='w-[149px]' />
               </div>
               <div className="hidden sm:block">
                 <p className="text-gray-600 text-sm">

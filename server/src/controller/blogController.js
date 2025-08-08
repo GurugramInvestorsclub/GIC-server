@@ -4,6 +4,50 @@ const { getCurrentDateTime, formatDateTime, validateDateFormat, validateTimeForm
 const { uploadToSupabase, deleteFromSupabase, extractFileNameFromUrl } = require('../utils/fileUpload');
 
 // Get all blogs with optional filtering and pagination
+
+function parseMultipartFields(req) {
+    console.log('Before parsing - tags:', typeof req.body.tags, req.body.tags);
+    console.log('Before parsing - resource_links:', typeof req.body.resource_links, req.body.resource_links);
+    console.log('Before parsing - is_published:', typeof req.body.is_published, req.body.is_published);
+    
+    // Parse tags if it's a JSON string
+    if (req.body.tags && typeof req.body.tags === 'string') {
+        try {
+            req.body.tags = JSON.parse(req.body.tags);
+            console.log('Parsed tags:', req.body.tags);
+        } catch (error) {
+            console.error('Error parsing tags JSON:', error);
+            req.body.tags = [];
+        }
+    }
+    
+    // Parse resource_links if it's a JSON string
+    if (req.body.resource_links && typeof req.body.resource_links === 'string') {
+        try {
+            req.body.resource_links = JSON.parse(req.body.resource_links);
+            console.log('Parsed resource_links:', req.body.resource_links);
+        } catch (error) {
+            console.error('Error parsing resource_links JSON:', error);
+            req.body.resource_links = [];
+        }
+    }
+    
+    // FIX: Parse is_published boolean from string
+    if (req.body.is_published !== undefined) {
+        if (typeof req.body.is_published === 'string') {
+            // Convert string "true"/"false" to actual boolean
+            req.body.is_published = req.body.is_published === 'true';
+        } else {
+            // Ensure it's a boolean
+            req.body.is_published = Boolean(req.body.is_published);
+        }
+        console.log('Parsed is_published:', req.body.is_published, typeof req.body.is_published);
+    }
+    
+    console.log('After parsing - tags:', typeof req.body.tags, req.body.tags);
+    console.log('After parsing - resource_links:', typeof req.body.resource_links, req.body.resource_links);
+    console.log('After parsing - is_published:', typeof req.body.is_published, req.body.is_published);
+}
 async function getAllBlogs(req, res) {
     try {
         // Extract query parameters
@@ -238,6 +282,9 @@ async function getBlogBySlug(req, res) {
 // Create new blog (protected route)
 async function createBlog(req, res) {
     try {
+        // Parse multipart fields FIRST - ADD THIS LINE
+        parseMultipartFields(req);
+        
         // Extract blog data from request body
         const {
             title,
@@ -251,6 +298,9 @@ async function createBlog(req, res) {
             is_published = false
         } = req.body;
         
+        console.log('CreateBlog - Received tags:', tags, 'Type:', typeof tags);
+        console.log('CreateBlog - Received resource_links:', resource_links, 'Type:', typeof resource_links);
+        
         // Validate required fields
         if (!title || !content || !author) {
             return res.status(400).json({
@@ -263,7 +313,6 @@ async function createBlog(req, res) {
 
         // Handle file upload or image URL
         if (req.file) {
-            // File was uploaded via multer
             const uploadResult = await uploadToSupabase(req.file);
             if (!uploadResult.success) {
                 return res.status(400).json({
@@ -273,11 +322,10 @@ async function createBlog(req, res) {
             }
             processedImageUrl = uploadResult.data.publicUrl;
         } else if (image_url) {
-            // URL was provided
             processedImageUrl = image_url.trim();
         }
         
-        // Validate and process published date/time
+        // Validate and process published date/time (existing code...)
         let processedDate, processedTime;
         
         if (published_date) {
@@ -308,10 +356,13 @@ async function createBlog(req, res) {
             processedTime = currentDateTime.data.time;
         }
         
-        // Process tags and resource links (existing code)
+        // FIXED: Process tags and resource links
         let processedTags = [];
         if (Array.isArray(tags)) {
             processedTags = tags.filter(tag => tag && typeof tag === 'string').map(tag => tag.trim());
+        } else if (typeof tags === 'string' && tags.trim()) {
+            // Handle single tag as string
+            processedTags = [tags.trim()];
         }
         
         let processedResourceLinks = [];
@@ -325,6 +376,9 @@ async function createBlog(req, res) {
                 typeof link.url === 'string'
             );
         }
+        
+        console.log('CreateBlog - Processed tags:', processedTags);
+        console.log('CreateBlog - Processed resource_links:', processedResourceLinks);
         
         // Generate unique slug from title
         const slugResult = await ensureUniqueSlug(title.trim());
@@ -352,6 +406,8 @@ async function createBlog(req, res) {
             created_at: currentDateTime.data.iso,
             updated_at: currentDateTime.data.iso
         };
+        
+        console.log('CreateBlog - Final blogData:', blogData);
         
         // Insert blog into database
         const { data: newBlog, error } = await supabase
@@ -403,6 +459,9 @@ async function updateBlog(req, res) {
             });
         }
         
+        // Parse multipart fields FIRST - ADD THIS LINE
+        parseMultipartFields(req);
+        
         // Check if blog exists
         const { data: existingBlog, error: fetchError } = await supabase
             .from('blogs')
@@ -437,12 +496,14 @@ async function updateBlog(req, res) {
             is_published
         } = req.body;
         
+        console.log('UpdateBlog - Received tags:', tags, 'Type:', typeof tags);
+        console.log('UpdateBlog - Received resource_links:', resource_links, 'Type:', typeof resource_links);
+        
         const updateData = {};
         let oldImageUrl = null;
         
-        // Handle image update
+        // Handle image update (existing code...)
         if (req.file) {
-            // New file uploaded
             const uploadResult = await uploadToSupabase(req.file);
             if (!uploadResult.success) {
                 return res.status(400).json({
@@ -451,16 +512,15 @@ async function updateBlog(req, res) {
                 });
             }
             updateData.image_url = uploadResult.data.publicUrl;
-            oldImageUrl = existingBlog.image_url; // Save old URL for deletion
+            oldImageUrl = existingBlog.image_url;
         } else if (image_url !== undefined) {
-            // URL provided or cleared
             updateData.image_url = image_url ? image_url.trim() : null;
             if (image_url !== existingBlog.image_url) {
-                oldImageUrl = existingBlog.image_url; // Save old URL for deletion
+                oldImageUrl = existingBlog.image_url;
             }
         }
         
-        // Handle title and slug regeneration
+        // Handle title and slug regeneration (existing code...)
         if (title && title.trim() !== existingBlog.title) {
             updateData.title = title.trim();
             const slugResult = await ensureUniqueSlug(title.trim(), id);
@@ -473,7 +533,7 @@ async function updateBlog(req, res) {
             updateData.slug = slugResult.slug;
         }
         
-        // Handle other fields (existing logic)
+        // Handle other fields
         if (content !== undefined) updateData.content = content.trim();
         if (author !== undefined) updateData.author = author.trim();
         if (is_published !== undefined) updateData.is_published = Boolean(is_published);
@@ -500,17 +560,35 @@ async function updateBlog(req, res) {
             updateData.published_time = timeValidation.time;
         }
         
+        // FIXED: Handle tags and resource_links properly
         if (tags !== undefined) {
-            updateData.tags = Array.isArray(tags) ? 
-                tags.filter(tag => tag && typeof tag === 'string').map(tag => tag.trim()) : [];
+            console.log('Processing tags update:', tags, typeof tags);
+            if (Array.isArray(tags)) {
+                updateData.tags = tags.filter(tag => tag && typeof tag === 'string').map(tag => tag.trim());
+            } else if (typeof tags === 'string' && tags.trim()) {
+                // Handle single tag as string
+                updateData.tags = [tags.trim()];
+            } else {
+                updateData.tags = [];
+            }
+            console.log('Final processed tags for update:', updateData.tags);
         }
         
         if (resource_links !== undefined) {
-            updateData.resource_links = Array.isArray(resource_links) ? 
-                resource_links.filter(link => 
-                    link && typeof link === 'object' && link.title && link.url &&
-                    typeof link.title === 'string' && typeof link.url === 'string'
-                ) : [];
+            console.log('Processing resource_links update:', resource_links, typeof resource_links);
+            if (Array.isArray(resource_links)) {
+                updateData.resource_links = resource_links.filter(link => 
+                    link && 
+                    typeof link === 'object' && 
+                    link.title && 
+                    link.url &&
+                    typeof link.title === 'string' &&
+                    typeof link.url === 'string'
+                );
+            } else {
+                updateData.resource_links = [];
+            }
+            console.log('Final processed resource_links for update:', updateData.resource_links);
         }
         
         const currentDateTime = getCurrentDateTime();
@@ -522,6 +600,8 @@ async function updateBlog(req, res) {
                 message: 'At least one field must be provided for update'
             });
         }
+        
+        console.log('Final updateData being sent to database:', updateData);
         
         // Update blog in database
         const { data: updatedBlog, error } = await supabase
@@ -546,6 +626,8 @@ async function updateBlog(req, res) {
                 await deleteFromSupabase(fileNameResult.fileName);
             }
         }
+        
+        console.log('Blog updated successfully:', updatedBlog);
         
         res.status(200).json({
             success: true,

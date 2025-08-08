@@ -166,27 +166,32 @@ export const useAuth = () => {
 
   // Logout function
   const logout = () => {
-    try {
-      // Clear token and user data
-      removeToken();
-      setUser(null);
-      setError(null);
-      
-      // Remove authorization header
-      delete api.defaults.headers.common['Authorization'];
-      
-      return {
-        success: true,
-        message: 'Logged out successfully'
-      };
-    } catch (error) {
-      console.error('Logout error:', error);
-      return {
-        success: false,
-        message: 'Error during logout'
-      };
-    }
-  };
+  try {
+    // Clear token and user data
+    removeToken();
+    setUser(null);
+    setError(null);
+    
+    // Remove authorization header
+    delete api.defaults.headers.common['Authorization'];
+    
+    // Force page reload to trigger authentication check and redirect
+    window.location.href = '/login';
+    
+    return {
+      success: true,
+      message: 'Logged out successfully'
+    };
+  } catch (error) {
+    console.error('Logout error:', error);
+    // Even if there's an error, redirect to login
+    window.location.href = '/login';
+    return {
+      success: false,
+      message: 'Error during logout'
+    };
+  }
+};
 
   // Check if user is authenticated
   const isAuthenticated = () => {

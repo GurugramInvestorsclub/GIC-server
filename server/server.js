@@ -12,6 +12,8 @@ const supabase = require('./src/db/supabase');
 const authRoutes = require('./src/routes/auth'); // Commented out until needed
 const blogRoutes = require('./src/routes/blog');
 
+const eventRoutes = require('./src/routes/events')
+
 // Create Express application
 const app = express();
 
@@ -70,6 +72,8 @@ function setupRoutes() {
 
     // Mount blog routes
     app.use('/api/blogs', blogRoutes);
+
+    app.use('/api/events', eventRoutes);
 
     // Handle 404 errors
     app.use((req, res) => {

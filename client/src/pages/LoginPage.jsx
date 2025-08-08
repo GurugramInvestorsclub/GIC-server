@@ -1,3 +1,5 @@
+// Replace the LoginPage.jsx file with this fixed version
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 
@@ -15,6 +17,9 @@ const LoginPage = () => {
   
   // Form submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Success state for visual feedback
+  const [loginSuccess, setLoginSuccess] = useState(false);
 
   // Clear errors when component mounts or form data changes
   useEffect(() => {
@@ -22,6 +27,7 @@ const LoginPage = () => {
       clearError();
     }
     setFormErrors({});
+    setLoginSuccess(false);
   }, [formData.email, formData.password]);
 
   // Handle input changes
@@ -58,8 +64,9 @@ const LoginPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Clear previous errors
+    // Clear previous states
     setFormErrors({});
+    setLoginSuccess(false);
     clearError();
     
     // Validate form
@@ -75,12 +82,16 @@ const LoginPage = () => {
       const result = await login(formData.email, formData.password);
       
       if (result.success) {
-        // Login successful - App.jsx will handle redirect
-        console.log('Login successful');
-      } else {
-        // Login failed - error will be shown via useAuth error state
-        console.error('Login failed:', result.message);
+        // Show success message
+        setLoginSuccess(true);
+        
+        // Wait a moment then redirect to dashboard
+        setTimeout(() => {
+          window.location.href = '/dashboard';
+        }, 1000);
       }
+      // If login fails, error will be shown via useAuth error state
+      
     } catch (err) {
       console.error('Login error:', err);
     } finally {
@@ -120,10 +131,17 @@ const LoginPage = () => {
             </p>
           </div>
 
+          {/* Success Message */}
+          {loginSuccess && (
+            <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded">
+              ✅ Login successful! Redirecting to dashboard...
+            </div>
+          )}
+
           {/* Display server errors */}
           {error && (
             <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-              {error}
+              ❌ {error}
             </div>
           )}
 
@@ -145,7 +163,7 @@ const LoginPage = () => {
                   formErrors.email ? 'border-red-500' : 'border-gray-300'
                 }`}
                 placeholder="admin@gurugraminvestors.com"
-                disabled={isSubmitting || loading}
+                disabled={isSubmitting || loading || loginSuccess}
               />
               {formErrors.email && (
                 <p className="mt-1 text-sm text-red-600">{formErrors.email}</p>
@@ -168,7 +186,7 @@ const LoginPage = () => {
                   formErrors.password ? 'border-red-500' : 'border-gray-300'
                 }`}
                 placeholder="Enter your password"
-                disabled={isSubmitting || loading}
+                disabled={isSubmitting || loading || loginSuccess}
               />
               {formErrors.password && (
                 <p className="mt-1 text-sm text-red-600">{formErrors.password}</p>
@@ -179,14 +197,19 @@ const LoginPage = () => {
             <div>
               <button
                 type="submit"
-                disabled={isSubmitting || loading}
+                disabled={isSubmitting || loading || loginSuccess}
                 className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white transition-colors ${
-                  isSubmitting || loading
+                  isSubmitting || loading || loginSuccess
                     ? 'bg-gray-400 cursor-not-allowed'
                     : 'bg-black hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black'
                 }`}
               >
-                {isSubmitting || loading ? (
+                {loginSuccess ? (
+                  <div className="flex items-center">
+                    <div className="text-green-500 mr-2">✅</div>
+                    Redirecting...
+                  </div>
+                ) : isSubmitting || loading ? (
                   <div className="flex items-center">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                     Signing in...
