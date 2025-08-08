@@ -5,6 +5,7 @@ import { useAuth } from './hooks/useAuth';
 // Import pages (we'll create these next)
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
+import EventsPage from './pages/EventsPage';
 
 // Loading component
 const LoadingSpinner = () => (
@@ -117,6 +118,14 @@ const AppContent = () => {
           element={
             <ProtectedRoute>
               <DashboardPage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/events" 
+          element={
+            <ProtectedRoute>
+              <EventsPage />
             </ProtectedRoute>
           } 
         />
