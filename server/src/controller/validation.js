@@ -1,5 +1,6 @@
 const { validateDateFormat, validateTimeFormat } = require('../utils/dateHelper');
 const { validateSlugFormat } = require('../utils/slugify');
+const { validateFileType, ALLOWED_FILE_TYPES, MAX_FILE_SIZE } = require('../utils/fileUpload');
 
 // Sanitize input data to prevent XSS and other attacks
 function sanitizeInput(data) {
@@ -76,8 +77,21 @@ function validateBlogData(req, res, next) {
             }
         }
         
-        // Validate image URL
-        if (image_url !== undefined && image_url !== null && image_url !== '') {
+        // Validate file upload (if present)
+        if (req.file) {
+            const fileValidation = validateFileType(req.file);
+            if (!fileValidation.success) {
+                errors.push(`File upload error: ${fileValidation.error}`);
+            }
+            
+            // If both file and image_url provided, prefer file
+            if (image_url) {
+                errors.push('Cannot provide both file upload and image_url. Use either file upload or image_url.');
+            }
+        }
+        
+        // Validate image URL (only if no file uploaded)
+        if (!req.file && image_url !== undefined && image_url !== null && image_url !== '') {
             if (typeof image_url !== 'string') {
                 errors.push('Image URL must be a string');
             } else {
@@ -179,7 +193,7 @@ function validateBlogData(req, res, next) {
             });
         }
         
-        // Sanitize the request body
+        // Sanitize the request body (but don't sanitize file)
         req.body = sanitizeInput(req.body);
         
         // Continue to next middleware

@@ -1,6 +1,7 @@
 const supabase = require('../db/supabase');
 const { ensureUniqueSlug, validateSlugFormat } = require('../utils/slugify');
 const { getCurrentDateTime, formatDateTime, validateDateFormat, validateTimeFormat } = require('../utils/dateHelper');
+const { uploadToSupabase, deleteFromSupabase, extractFileNameFromUrl } = require('../utils/fileUpload');
 
 // Get all blogs with optional filtering and pagination
 async function getAllBlogs(req, res) {
@@ -257,6 +258,24 @@ async function createBlog(req, res) {
                 message: 'Title, content, and author are required'
             });
         }
+
+        let processedImageUrl = null;
+
+        // Handle file upload or image URL
+        if (req.file) {
+            // File was uploaded via multer
+            const uploadResult = await uploadToSupabase(req.file);
+            if (!uploadResult.success) {
+                return res.status(400).json({
+                    error: 'File upload failed',
+                    message: uploadResult.error
+                });
+            }
+            processedImageUrl = uploadResult.data.publicUrl;
+        } else if (image_url) {
+            // URL was provided
+            processedImageUrl = image_url.trim();
+        }
         
         // Validate and process published date/time
         let processedDate, processedTime;
@@ -271,7 +290,6 @@ async function createBlog(req, res) {
             }
             processedDate = published_date;
         } else {
-            // Use current date if not provided
             const currentDateTime = getCurrentDateTime();
             processedDate = currentDateTime.data.date;
         }
@@ -286,18 +304,16 @@ async function createBlog(req, res) {
             }
             processedTime = timeValidation.time;
         } else {
-            // Use current time if not provided
             const currentDateTime = getCurrentDateTime();
             processedTime = currentDateTime.data.time;
         }
         
-        // Validate tags (should be array of strings)
+        // Process tags and resource links (existing code)
         let processedTags = [];
         if (Array.isArray(tags)) {
             processedTags = tags.filter(tag => tag && typeof tag === 'string').map(tag => tag.trim());
         }
         
-        // Validate resource links (should be array of objects with title and url)
         let processedResourceLinks = [];
         if (Array.isArray(resource_links)) {
             processedResourceLinks = resource_links.filter(link => 
@@ -319,14 +335,13 @@ async function createBlog(req, res) {
             });
         }
         
-        // Get current timestamp
         const currentDateTime = getCurrentDateTime();
         
         // Prepare blog data for insertion
         const blogData = {
             title: title.trim(),
             content: content.trim(),
-            image_url: image_url ? image_url.trim() : null,
+            image_url: processedImageUrl,
             author: author.trim(),
             published_date: processedDate,
             published_time: processedTime,
@@ -346,6 +361,14 @@ async function createBlog(req, res) {
             .single();
         
         if (error) {
+            // If database insert fails and we uploaded a file, clean it up
+            if (req.file && processedImageUrl) {
+                const fileNameResult = extractFileNameFromUrl(processedImageUrl);
+                if (fileNameResult.success) {
+                    await deleteFromSupabase(fileNameResult.fileName);
+                }
+            }
+            
             console.error('Database Error creating blog:', error);
             return res.status(500).json({
                 error: 'Database error',
@@ -353,18 +376,14 @@ async function createBlog(req, res) {
             });
         }
         
-        // Return successful response
         res.status(201).json({
             success: true,
             message: 'Blog created successfully',
-            data: {
-                blog: newBlog
-            }
+            data: { blog: newBlog }
         });
         
     } catch (error) {
         console.error('Create Blog Error:', error);
-        
         res.status(500).json({
             error: 'Internal Server Error',
             message: 'An unexpected error occurred while creating the blog'
@@ -377,7 +396,6 @@ async function updateBlog(req, res) {
     try {
         const { id } = req.params;
         
-        // Validate blog ID
         if (!id) {
             return res.status(400).json({
                 error: 'Missing blog ID',
@@ -388,7 +406,7 @@ async function updateBlog(req, res) {
         // Check if blog exists
         const { data: existingBlog, error: fetchError } = await supabase
             .from('blogs')
-            .select('id, title, slug')
+            .select('id, title, slug, image_url')
             .eq('id', id)
             .single();
         
@@ -407,7 +425,6 @@ async function updateBlog(req, res) {
             });
         }
         
-        // Extract update data from request body
         const {
             title,
             content,
@@ -420,14 +437,32 @@ async function updateBlog(req, res) {
             is_published
         } = req.body;
         
-        // Prepare update data (only include provided fields)
         const updateData = {};
+        let oldImageUrl = null;
+        
+        // Handle image update
+        if (req.file) {
+            // New file uploaded
+            const uploadResult = await uploadToSupabase(req.file);
+            if (!uploadResult.success) {
+                return res.status(400).json({
+                    error: 'File upload failed',
+                    message: uploadResult.error
+                });
+            }
+            updateData.image_url = uploadResult.data.publicUrl;
+            oldImageUrl = existingBlog.image_url; // Save old URL for deletion
+        } else if (image_url !== undefined) {
+            // URL provided or cleared
+            updateData.image_url = image_url ? image_url.trim() : null;
+            if (image_url !== existingBlog.image_url) {
+                oldImageUrl = existingBlog.image_url; // Save old URL for deletion
+            }
+        }
         
         // Handle title and slug regeneration
         if (title && title.trim() !== existingBlog.title) {
             updateData.title = title.trim();
-            
-            // Generate new slug if title changed
             const slugResult = await ensureUniqueSlug(title.trim(), id);
             if (!slugResult.success) {
                 return res.status(500).json({
@@ -438,70 +473,49 @@ async function updateBlog(req, res) {
             updateData.slug = slugResult.slug;
         }
         
-        // Handle other fields
+        // Handle other fields (existing logic)
         if (content !== undefined) updateData.content = content.trim();
-        if (image_url !== undefined) updateData.image_url = image_url ? image_url.trim() : null;
         if (author !== undefined) updateData.author = author.trim();
         if (is_published !== undefined) updateData.is_published = Boolean(is_published);
         
-        // Handle published date
-        if (published_date !== undefined) {
-            if (published_date) {
-                const dateValidation = validateDateFormat(published_date);
-                if (!dateValidation.success) {
-                    return res.status(400).json({
-                        error: 'Invalid published date',
-                        message: dateValidation.error
-                    });
-                }
-                updateData.published_date = published_date;
+        if (published_date !== undefined && published_date) {
+            const dateValidation = validateDateFormat(published_date);
+            if (!dateValidation.success) {
+                return res.status(400).json({
+                    error: 'Invalid published date',
+                    message: dateValidation.error
+                });
             }
+            updateData.published_date = published_date;
         }
         
-        // Handle published time
-        if (published_time !== undefined) {
-            if (published_time) {
-                const timeValidation = validateTimeFormat(published_time);
-                if (!timeValidation.success) {
-                    return res.status(400).json({
-                        error: 'Invalid published time',
-                        message: timeValidation.error
-                    });
-                }
-                updateData.published_time = timeValidation.time;
+        if (published_time !== undefined && published_time) {
+            const timeValidation = validateTimeFormat(published_time);
+            if (!timeValidation.success) {
+                return res.status(400).json({
+                    error: 'Invalid published time',
+                    message: timeValidation.error
+                });
             }
+            updateData.published_time = timeValidation.time;
         }
         
-        // Handle tags
         if (tags !== undefined) {
-            if (Array.isArray(tags)) {
-                updateData.tags = tags.filter(tag => tag && typeof tag === 'string').map(tag => tag.trim());
-            } else {
-                updateData.tags = [];
-            }
+            updateData.tags = Array.isArray(tags) ? 
+                tags.filter(tag => tag && typeof tag === 'string').map(tag => tag.trim()) : [];
         }
         
-        // Handle resource links
         if (resource_links !== undefined) {
-            if (Array.isArray(resource_links)) {
-                updateData.resource_links = resource_links.filter(link => 
-                    link && 
-                    typeof link === 'object' && 
-                    link.title && 
-                    link.url &&
-                    typeof link.title === 'string' &&
-                    typeof link.url === 'string'
-                );
-            } else {
-                updateData.resource_links = [];
-            }
+            updateData.resource_links = Array.isArray(resource_links) ? 
+                resource_links.filter(link => 
+                    link && typeof link === 'object' && link.title && link.url &&
+                    typeof link.title === 'string' && typeof link.url === 'string'
+                ) : [];
         }
         
-        // Add updated timestamp
         const currentDateTime = getCurrentDateTime();
         updateData.updated_at = currentDateTime.data.iso;
         
-        // Check if there's anything to update
         if (Object.keys(updateData).length === 1) { // Only updated_at
             return res.status(400).json({
                 error: 'No update data provided',
@@ -525,18 +539,22 @@ async function updateBlog(req, res) {
             });
         }
         
-        // Return successful response
+        // Delete old image file if it was replaced and it's from our storage
+        if (oldImageUrl && oldImageUrl.includes('/storage/v1/object/public/blog-images/')) {
+            const fileNameResult = extractFileNameFromUrl(oldImageUrl);
+            if (fileNameResult.success) {
+                await deleteFromSupabase(fileNameResult.fileName);
+            }
+        }
+        
         res.status(200).json({
             success: true,
             message: 'Blog updated successfully',
-            data: {
-                blog: updatedBlog
-            }
+            data: { blog: updatedBlog }
         });
         
     } catch (error) {
         console.error('Update Blog Error:', error);
-        
         res.status(500).json({
             error: 'Internal Server Error',
             message: 'An unexpected error occurred while updating the blog'
