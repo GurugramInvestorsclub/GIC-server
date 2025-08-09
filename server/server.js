@@ -22,17 +22,23 @@ const PORT = process.env.PORT || 3000;
 
 // Setup middleware functions
 function setupMiddleware() {
-    // Enable CORS for all routes
+    // Enable CORS for all routes - FIXED VERSION
     app.use(cors({
-    origin: process.env.NODE_ENV === 'production' 
-        ? [
-            'https://gic-server.vercel.app',  // Your real domain
-            'http://localhost:5173',                    // ✅ Add this for testing
-            'http://localhost:3000'                     // ✅ Add this too
-          ] 
-        : ['http://localhost:3000', 'http://localhost:5173', 'https://gic-server.vercel.app'],
-    credentials: true
-}));
+        origin: process.env.NODE_ENV === 'production' 
+            ? [
+                'https://gic-adminpanel.vercel.app',  // ✅ CORRECT: Your frontend domain
+                'http://localhost:5173',              // For local development
+                'http://localhost:3000'               // For local development
+              ] 
+            : [
+                'http://localhost:3000', 
+                'http://localhost:5173', 
+                'https://gic-adminpanel.vercel.app'   // Allow in development too
+              ],
+        credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization']
+    }));
 
     // Security middleware
     app.use(helmet());
