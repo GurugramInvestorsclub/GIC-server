@@ -26,11 +26,11 @@ function setupMiddleware() {
     app.use(cors({
     origin: process.env.NODE_ENV === 'production' 
         ? [
-            'https://your-actual-frontend-domain.com',  // Your real domain
+            'https://gic-server.vercel.app',  // Your real domain
             'http://localhost:5173',                    // ✅ Add this for testing
             'http://localhost:3000'                     // ✅ Add this too
           ] 
-        : ['http://localhost:3000', 'http://localhost:5173'],
+        : ['http://localhost:3000', 'http://localhost:5173', 'https://gic-server.vercel.app'],
     credentials: true
 }));
 
