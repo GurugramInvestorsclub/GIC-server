@@ -5,21 +5,70 @@ const { uploadToSupabase, deleteFromSupabase, extractFileNameFromUrl } = require
 
 // Helper function to parse JSON fields from multipart/form-data
 function parseMultipartFields(req) {
-    console.log('Event - Before parsing - is_active:', typeof req.body.is_active, req.body.is_active);
+    console.log('Event - Before parsing:', req.body);
+    
+    // List of text fields that should be null if empty
+    const optionalTextFields = [
+        'description',
+        'venue_details', 
+        'external_payment_link',
+        'registration_link',
+        'image_url',
+        'event_time',
+        'booking_end_date',
+        'booking_end_time'
+    ];
+    
+    // Convert empty strings to null for optional text fields
+    optionalTextFields.forEach(field => {
+        if (req.body[field] !== undefined) {
+            if (typeof req.body[field] === 'string') {
+                // Convert empty strings or whitespace-only strings to null
+                req.body[field] = req.body[field].trim() || null;
+            }
+        }
+    });
+    
+    // Handle required text fields (ensure they're trimmed but not null)
+    const requiredTextFields = ['title', 'location'];
+    requiredTextFields.forEach(field => {
+        if (req.body[field] !== undefined && typeof req.body[field] === 'string') {
+            req.body[field] = req.body[field].trim();
+        }
+    });
     
     // Parse is_active boolean from string
     if (req.body.is_active !== undefined) {
         if (typeof req.body.is_active === 'string') {
             // Convert string "true"/"false" to actual boolean
-            req.body.is_active = req.body.is_active === 'true';
+            req.body.is_active = req.body.is_active.toLowerCase() === 'true';
         } else {
             // Ensure it's a boolean
             req.body.is_active = Boolean(req.body.is_active);
         }
-        console.log('Event - Parsed is_active:', req.body.is_active, typeof req.body.is_active);
     }
     
-    console.log('Event - After parsing - is_active:', typeof req.body.is_active, req.body.is_active);
+    // Handle date fields (ensure proper format, convert empty to null)
+    const dateFields = ['event_date', 'booking_end_date'];
+    dateFields.forEach(field => {
+        if (req.body[field] !== undefined) {
+            if (typeof req.body[field] === 'string') {
+                req.body[field] = req.body[field].trim() || null;
+            }
+        }
+    });
+    
+    // Handle time fields (ensure proper format, convert empty to null)  
+    const timeFields = ['event_time', 'booking_end_time'];
+    timeFields.forEach(field => {
+        if (req.body[field] !== undefined) {
+            if (typeof req.body[field] === 'string') {
+                req.body[field] = req.body[field].trim() || null;
+            }
+        }
+    });
+    
+    console.log('Event - After parsing:', req.body);
 }
 
 // Helper function to check if booking is still open
@@ -363,7 +412,7 @@ async function getUpcomingEvents(req, res) {
 async function createEvent(req, res) {
     try {
         // Parse multipart fields first
-        parseMultipartFields(req);
+        // parseMultipartFields(req);
         
         // Extract event data from request body
         const {
@@ -568,7 +617,7 @@ async function updateEvent(req, res) {
         }
         
         // Parse multipart fields first
-        parseMultipartFields(req);
+        // parseMultipartFields(req);
         
         // Check if event exists
         const { data: existingEvent, error: fetchError } = await supabase

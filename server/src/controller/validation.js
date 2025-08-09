@@ -212,6 +212,9 @@ function validateBlogData(req, res, next) {
 // NEW: Validate event data for creation and updates
 function validateEventData(req, res, next) {
     try {
+        // FIRST: Parse multipart form data before validation
+        parseMultipartFormData(req);
+        
         const {
             title,
             description,
@@ -304,13 +307,13 @@ function validateEventData(req, res, next) {
                 errors.push(`Event date error: ${dateValidation.error}`);
             } else {
                 // Check if event date is in the future
-                const eventDate = new Date(event_date);
-                const today = new Date();
-                today.setHours(0, 0, 0, 0); // Reset time for fair comparison
+                // const eventDate = new Date(event_date);
+                // const today = new Date();
+                // today.setHours(0, 0, 0, 0); // Reset time for fair comparison
                 
-                if (eventDate < today) {
-                    errors.push('Event date must be today or in the future');
-                }
+                // if (eventDate < today) {
+                //     errors.push('Event date must be today or in the future');
+                // }
             }
         }
         
@@ -373,7 +376,7 @@ function validateEventData(req, res, next) {
             }
         }
         
-        // Validate is_active
+        // Validate is_active (now properly parsed as boolean)
         if (is_active !== undefined) {
             if (typeof is_active !== 'boolean') {
                 errors.push('is_active must be a boolean (true or false)');
@@ -403,6 +406,70 @@ function validateEventData(req, res, next) {
             message: 'An error occurred during event data validation'
         });
     }
+}
+
+// Helper function to parse multipart form data in validation
+function parseMultipartFormData(req) {
+    // List of text fields that should be null if empty
+    const optionalTextFields = [
+        'description',
+        'venue_details', 
+        'external_payment_link',
+        'registration_link',
+        'image_url',
+        'event_time',
+        'booking_end_date',
+        'booking_end_time'
+    ];
+    
+    // Convert empty strings to null for optional text fields
+    optionalTextFields.forEach(field => {
+        if (req.body[field] !== undefined) {
+            if (typeof req.body[field] === 'string') {
+                // Convert empty strings or whitespace-only strings to null
+                req.body[field] = req.body[field].trim() || null;
+            }
+        }
+    });
+    
+    // Handle required text fields (ensure they're trimmed but not null)
+    const requiredTextFields = ['title', 'location'];
+    requiredTextFields.forEach(field => {
+        if (req.body[field] !== undefined && typeof req.body[field] === 'string') {
+            req.body[field] = req.body[field].trim();
+        }
+    });
+    
+    // Parse is_active boolean from string
+    if (req.body.is_active !== undefined) {
+        if (typeof req.body.is_active === 'string') {
+            // Convert string "true"/"false" to actual boolean
+            req.body.is_active = req.body.is_active.toLowerCase() === 'true';
+        } else {
+            // Ensure it's a boolean
+            req.body.is_active = Boolean(req.body.is_active);
+        }
+    }
+    
+    // Handle date fields (ensure proper format, convert empty to null)
+    const dateFields = ['event_date', 'booking_end_date'];
+    dateFields.forEach(field => {
+        if (req.body[field] !== undefined) {
+            if (typeof req.body[field] === 'string') {
+                req.body[field] = req.body[field].trim() || null;
+            }
+        }
+    });
+    
+    // Handle time fields (ensure proper format, convert empty to null)  
+    const timeFields = ['event_time', 'booking_end_time'];
+    timeFields.forEach(field => {
+        if (req.body[field] !== undefined) {
+            if (typeof req.body[field] === 'string') {
+                req.body[field] = req.body[field].trim() || null;
+            }
+        }
+    });
 }
 
 // Validate login data

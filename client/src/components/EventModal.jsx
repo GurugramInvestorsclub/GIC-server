@@ -216,93 +216,101 @@ const EventModal = ({ isOpen, onClose, onSuccess, editingEvent = null }) => {
 
   // Handle form submission
   const handleSubmit = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
+  
+  // Validate form
+  const formErrors = validateForm();
+  if (Object.keys(formErrors).length > 0) {
+    setErrors(formErrors);
+    return;
+  }
+  
+  setLoading(true);
+  setErrors({});
+  
+  try {
+    // Prepare form data
+    const submitData = new FormData();
     
-    // Validate form
-    const formErrors = validateForm();
-    if (Object.keys(formErrors).length > 0) {
-      setErrors(formErrors);
-      return;
-    }
+    // Add REQUIRED text fields (safe to trim)
+    submitData.append('title', formData.title.trim());
+    submitData.append('event_date', formData.event_date);
+    submitData.append('location', formData.location.trim());
+    submitData.append('is_active', formData.is_active);
     
-    setLoading(true);
-    setErrors({});
-    
-    try {
-      // Prepare form data
-      const submitData = new FormData();
-      
-      // Add text fields
-      submitData.append('title', formData.title.trim());
+    // Add OPTIONAL text fields (with null/undefined checks)
+    if (formData.description && formData.description.trim()) {
       submitData.append('description', formData.description.trim());
-      submitData.append('event_date', formData.event_date);
-      submitData.append('location', formData.location.trim());
-      submitData.append('venue_details', formData.venue_details.trim());
-      submitData.append('is_active', formData.is_active);
-      
-      // Add optional fields
-      if (formData.event_time) {
-        submitData.append('event_time', formData.event_time);
-      }
-      
-      if (formData.booking_end_date) {
-        submitData.append('booking_end_date', formData.booking_end_date);
-      }
-      
-      if (formData.booking_end_time) {
-        submitData.append('booking_end_time', formData.booking_end_time);
-      }
-      
-      if (formData.external_payment_link && formData.external_payment_link.trim()) {
-        submitData.append('external_payment_link', formData.external_payment_link.trim());
-      }
-      
-      if (formData.registration_link && formData.registration_link.trim()) {
-        submitData.append('registration_link', formData.registration_link.trim());
-      }
-      
-      // Handle image
-      if (selectedFile) {
-        submitData.append('image', selectedFile);
-      } else if (formData.image_url) {
-        submitData.append('image_url', formData.image_url);
-      }
-      
-      let response;
-      
-      if (isEditing) {
-        // Update existing event
-        response = await api.put(`/events/${editingEvent.id}`, submitData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
-        });
-      } else {
-        // Create new event
-        response = await api.post('/events', submitData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
-        });
-      }
-      
-      if (response.data.success) {
-        onSuccess();
-        resetForm();
-      } else {
-        setErrors({ submit: response.data.message || 'Operation failed' });
-      }
-      
-    } catch (err) {
-      console.error('Event submission error:', err);
-      const errorMessage = err.response?.data?.message || 
-                          err.response?.data?.error || 
-                          'Failed to save event. Please try again.';
-      setErrors({ submit: errorMessage });
-    } finally {
-      setLoading(false);
     }
-  };
+    
+    if (formData.venue_details && formData.venue_details.trim()) {
+      submitData.append('venue_details', formData.venue_details.trim());
+    }
+    
+    // Add optional time fields
+    if (formData.event_time) {
+      submitData.append('event_time', formData.event_time);
+    }
+    
+    if (formData.booking_end_date) {
+      submitData.append('booking_end_date', formData.booking_end_date);
+    }
+    
+    if (formData.booking_end_time) {
+      submitData.append('booking_end_time', formData.booking_end_time);
+    }
+    
+    // Add optional URL fields (with validation)
+    if (formData.external_payment_link && formData.external_payment_link.trim()) {
+      submitData.append('external_payment_link', formData.external_payment_link.trim());
+    }
+    
+    if (formData.registration_link && formData.registration_link.trim()) {
+      submitData.append('registration_link', formData.registration_link.trim());
+    }
+    
+    // Handle image
+    if (selectedFile) {
+      submitData.append('image', selectedFile);
+    } else if (formData.image_url) {
+      submitData.append('image_url', formData.image_url);
+    }
+    
+    let response;
+    
+    if (isEditing) {
+      // Update existing event
+      response = await api.put(`/events/${editingEvent.id}`, submitData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+    } else {
+      // Create new event
+      response = await api.post('/events', submitData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+    }
+    
+    if (response.data.success) {
+      onSuccess();
+      resetForm();
+    } else {
+      setErrors({ submit: response.data.message || 'Operation failed' });
+    }
+    
+  } catch (err) {
+    console.error('Event submission error:', err);
+    const errorMessage = err.response?.data?.message || 
+                        err.response?.data?.error || 
+                        'Failed to save event. Please try again.';
+    setErrors({ submit: errorMessage });
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Handle modal close
   const handleClose = () => {
