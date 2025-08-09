@@ -24,11 +24,15 @@ const PORT = process.env.PORT || 3000;
 function setupMiddleware() {
     // Enable CORS for all routes
     app.use(cors({
-        origin: process.env.NODE_ENV === 'production' 
-            ? ['https://your-frontend-domain.com'] 
-            : ['http://localhost:3000', 'http://localhost:5173'],
-        credentials: true
-    }));
+    origin: process.env.NODE_ENV === 'production' 
+        ? [
+            'https://your-actual-frontend-domain.com',  // Your real domain
+            'http://localhost:5173',                    // ✅ Add this for testing
+            'http://localhost:3000'                     // ✅ Add this too
+          ] 
+        : ['http://localhost:3000', 'http://localhost:5173'],
+    credentials: true
+}));
 
     // Security middleware
     app.use(helmet());
