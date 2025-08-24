@@ -12,7 +12,8 @@ const {
     createBlog,
     updateBlog,
     deleteBlog,
-    getBlogTags
+    getBlogTags,
+    uploadInlineImage 
 } = require('../controller/blogController');
 
 // Import file upload constants
@@ -93,7 +94,7 @@ router.get('/:slug', optionalAuth, getBlogBySlug);
 // Requires: title, content, author
 // Optional: image (file upload) OR image_url, published_date, published_time, tags, resource_links, is_published
 // Content-Type: multipart/form-data (for file upload) OR application/json (for URL only)
-router.post('/', requireAuth, upload.single('image'), handleMulterError, createBlog);
+router.post('/upload-inline-image', requireAuth, upload.single('image'), handleMulterError, uploadInlineImage);
 
 // PUT /api/blogs/:id - Update existing blog
 // All fields are optional, only provided fields will be updated
@@ -118,7 +119,8 @@ router.use((req, res) => {
             protected: [
                 'POST /api/blogs - Create blog (requires auth, supports file upload)',
                 'PUT /api/blogs/:id - Update blog (requires auth, supports file upload)',
-                'DELETE /api/blogs/:id - Delete blog (requires auth)'
+                'DELETE /api/blogs/:id - Delete blog (requires auth)',
+                'POST /api/blogs/upload-inline-image - Upload inline image (requires auth)'  // Add this line
             ]
         },
         fileUploadInfo: {

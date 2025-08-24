@@ -770,6 +770,47 @@ async function getBlogTags(req, res) {
     }
 }
 
+async function uploadInlineImage(req, res) {
+    try {
+        // Check if file was uploaded
+        if (!req.file) {
+            return res.status(400).json({
+                error: 'No file provided',
+                message: 'Please select an image file to upload'
+            });
+        }
+
+        // Upload file to Supabase using existing utility
+        const uploadResult = await uploadToSupabase(req.file);
+        
+        if (!uploadResult.success) {
+            return res.status(400).json({
+                error: 'File upload failed',
+                message: uploadResult.error
+            });
+        }
+
+        // Return successful response with image URL
+        res.status(200).json({
+            success: true,
+            message: 'Image uploaded successfully',
+            data: {
+                imageUrl: uploadResult.data.publicUrl,
+                fileName: uploadResult.data.fileName,
+                fileSize: uploadResult.data.fileSize
+            }
+        });
+
+    } catch (error) {
+        console.error('Inline Image Upload Error:', error);
+        
+        res.status(500).json({
+            error: 'Internal Server Error',
+            message: 'An unexpected error occurred while uploading the image'
+        });
+    }
+}
+
 // Export all controller functions
 module.exports = {
     getAllBlogs,
@@ -777,5 +818,6 @@ module.exports = {
     createBlog,
     updateBlog,
     deleteBlog,
-    getBlogTags
+    getBlogTags,
+    uploadInlineImage
 };
