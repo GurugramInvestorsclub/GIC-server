@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth';
 
 const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
-  const { api } = useAuth();
-  
+  const { api, uploadInlineImage } = useAuth();
+
   // Determine if we're editing or creating
   const isEditing = !!editingBlog;
-  
+
   // Form state
   const [formData, setFormData] = useState({
     title: '',
@@ -19,16 +19,21 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
     resource_links: [],
     is_published: false
   });
-  
+
   // File upload state
   const [selectedFile, setSelectedFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
-  
+
   // UI state
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [tagInput, setTagInput] = useState('');
   const [resourceInput, setResourceInput] = useState({ title: '', url: '' });
+  const [uploadingInlineImage, setUploadingInlineImage] = useState(false);
+  const [previewMode, setPreviewMode] = useState(false);
+
+  // Ref for textarea
+  const textareaRef = useRef(null);
 
   // Initialize form data when modal opens or editing blog changes
   useEffect(() => {
@@ -40,6 +45,69 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
       }
     }
   }, [isOpen, editingBlog, isEditing]);
+
+  // Handle inline image upload
+  const handleInlineImageUpload = async (file) => {
+    setUploadingInlineImage(true);
+
+    try {
+      const uploadResult = await uploadInlineImage(file);
+
+      if (uploadResult.success) {
+        insertImageAtCursor(uploadResult.imageUrl);
+        return true;
+      } else {
+        alert(`Image upload failed: ${uploadResult.message}`);
+        return false;
+      }
+    } catch (error) {
+      console.error('Image upload error:', error);
+      alert('Failed to upload image. Please try again.');
+      return false;
+    } finally {
+      setUploadingInlineImage(false);
+    }
+  };
+
+  // Insert image HTML at cursor position in textarea
+  const insertImageAtCursor = (imageUrl) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const currentContent = formData.content;
+
+    const imageHtml = `<img src="${imageUrl}" alt="Uploaded image" style="max-width: 100%; height: auto; margin: 10px 0;" />`;
+
+    const newContent = currentContent.substring(0, start) + imageHtml + currentContent.substring(end);
+
+    setFormData((prev) => ({
+      ...prev,
+      content: newContent
+    }));
+
+    // Restore cursor position after the inserted image
+    setTimeout(() => {
+      textarea.focus();
+      const caretPos = start + imageHtml.length;
+      textarea.setSelectionRange(caretPos, caretPos);
+    }, 0);
+  };
+
+  // Handle image upload button click
+  const handleImageUploadClick = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        handleInlineImageUpload(file);
+      }
+    };
+    input.click();
+  };
 
   // Populate form with existing blog data for editing
   const populateForm = (blog) => {
@@ -54,14 +122,12 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
       resource_links: blog.resource_links || [],
       is_published: blog.is_published || false
     });
-    
-    // Set image preview if URL exists
-    if (blog.image_url) {
-      setImagePreview(blog.image_url);
-    }
-    
+
+    if (blog.image_url) setImagePreview(blog.image_url);
+
     setSelectedFile(null);
     setErrors({});
+    setPreviewMode(false);
   };
 
   // Reset form for new blog creation
@@ -69,7 +135,7 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
     const today = new Date();
     const currentDate = today.toISOString().split('T')[0];
     const currentTime = today.toTimeString().split(' ')[0].substring(0, 5);
-    
+
     setFormData({
       title: '',
       content: '',
@@ -81,25 +147,27 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
       resource_links: [],
       is_published: false
     });
-    
+
     setSelectedFile(null);
     setImagePreview(null);
     setErrors({});
     setTagInput('');
     setResourceInput({ title: '', url: '' });
+    setPreviewMode(false);
   };
 
   // Handle input changes
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
+
+    setFormData((prev) => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
-    
+
     // Clear error for this field
     if (errors[name]) {
-      setErrors(prev => ({
+      setErrors((prev) => ({
         ...prev,
         [name]: ''
       }));
@@ -109,40 +177,34 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
   // Handle file selection
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
-    
+
     if (file) {
-      // Validate file type
       const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
       if (!allowedTypes.includes(file.type)) {
-        setErrors(prev => ({
+        setErrors((prev) => ({
           ...prev,
           image: 'Please select a valid image file (JPEG, PNG, WebP, or GIF)'
         }));
         return;
       }
-      
-      // Validate file size (10MB max)
+
       const maxSize = 10 * 1024 * 1024;
       if (file.size > maxSize) {
-        setErrors(prev => ({
+        setErrors((prev) => ({
           ...prev,
           image: 'File size must be less than 10MB'
         }));
         return;
       }
-      
+
       setSelectedFile(file);
-      
-      // Create preview
+
       const reader = new FileReader();
-      reader.onload = (e) => {
-        setImagePreview(e.target.result);
-      };
+      reader.onload = (ev) => setImagePreview(ev.target.result);
       reader.readAsDataURL(file);
-      
-      // Clear image URL if file is selected
-      setFormData(prev => ({ ...prev, image_url: '' }));
-      setErrors(prev => ({ ...prev, image: '' }));
+
+      setFormData((prev) => ({ ...prev, image_url: '' }));
+      setErrors((prev) => ({ ...prev, image: '' }));
     }
   };
 
@@ -150,20 +212,17 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
   const removeImage = () => {
     setSelectedFile(null);
     setImagePreview(null);
-    setFormData(prev => ({ ...prev, image_url: '' }));
-    
-    // Reset file input
+    setFormData((prev) => ({ ...prev, image_url: '' }));
+
     const fileInput = document.getElementById('image-upload');
-    if (fileInput) {
-      fileInput.value = '';
-    }
+    if (fileInput) fileInput.value = '';
   };
 
   // Handle tag addition
   const addTag = () => {
     const tag = tagInput.trim();
     if (tag && !formData.tags.includes(tag)) {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         tags: [...prev.tags, tag]
       }));
@@ -173,9 +232,9 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
 
   // Remove tag
   const removeTag = (tagToRemove) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      tags: prev.tags.filter(tag => tag !== tagToRemove)
+      tags: prev.tags.filter((tag) => tag !== tagToRemove)
     }));
   };
 
@@ -191,129 +250,124 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
   const addResourceLink = () => {
     const { title, url } = resourceInput;
     if (title.trim() && url.trim()) {
-      // Basic URL validation
       const urlPattern = /^https?:\/\/.+/;
       if (!urlPattern.test(url.trim())) {
-        setErrors(prev => ({
+        setErrors((prev) => ({
           ...prev,
           resource: 'Please enter a valid URL starting with http:// or https://'
         }));
         return;
       }
-      
-      setFormData(prev => ({
+
+      setFormData((prev) => ({
         ...prev,
         resource_links: [...prev.resource_links, { title: title.trim(), url: url.trim() }]
       }));
       setResourceInput({ title: '', url: '' });
-      setErrors(prev => ({ ...prev, resource: '' }));
+      setErrors((prev) => ({ ...prev, resource: '' }));
     }
   };
 
   // Remove resource link
   const removeResourceLink = (index) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       resource_links: prev.resource_links.filter((_, i) => i !== index)
     }));
   };
 
+  // Insert formatting helpers
+  const insertFormatting = (before, after = '') => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = formData.content.substring(start, end);
+    const currentContent = formData.content;
+
+    const newText = before + selectedText + after;
+    const newContent = currentContent.substring(0, start) + newText + currentContent.substring(end);
+
+    setFormData((prev) => ({
+      ...prev,
+      content: newContent
+    }));
+
+    setTimeout(() => {
+      textarea.focus();
+      const newCursorPos = start + before.length + selectedText.length + after.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 0);
+  };
+
   // Validate form
   const validateForm = () => {
     const newErrors = {};
-    
-    if (!formData.title.trim()) {
-      newErrors.title = 'Title is required';
-    }
-    
-    if (!formData.content.trim()) {
-      newErrors.content = 'Content is required';
-    }
-    
-    if (!formData.author.trim()) {
-      newErrors.author = 'Author is required';
-    }
-    
-    if (!formData.published_date) {
-      newErrors.published_date = 'Published date is required';
-    }
-    
-    if (!formData.published_time) {
-      newErrors.published_time = 'Published time is required';
-    }
-    
+
+    if (!formData.title.trim()) newErrors.title = 'Title is required';
+    if (!formData.content.trim()) newErrors.content = 'Content is required';
+    if (!formData.author.trim()) newErrors.author = 'Author is required';
+    if (!formData.published_date) newErrors.published_date = 'Published date is required';
+    if (!formData.published_time) newErrors.published_time = 'Published time is required';
+
     return newErrors;
   };
 
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Validate form
+
     const formErrors = validateForm();
     if (Object.keys(formErrors).length > 0) {
       setErrors(formErrors);
       return;
     }
-    
+
     setLoading(true);
     setErrors({});
-    
+
     try {
-      // Prepare form data
       const submitData = new FormData();
-      
-      // Add text fields
+
       submitData.append('title', formData.title.trim());
       submitData.append('content', formData.content.trim());
       submitData.append('author', formData.author.trim());
       submitData.append('published_date', formData.published_date);
       submitData.append('published_time', formData.published_time);
       submitData.append('is_published', formData.is_published);
-      
-      // Add tags as JSON string
       submitData.append('tags', JSON.stringify(formData.tags));
-      
-      // Add resource links as JSON string
       submitData.append('resource_links', JSON.stringify(formData.resource_links));
-      
-      // Handle image
+
       if (selectedFile) {
         submitData.append('image', selectedFile);
       } else if (formData.image_url) {
         submitData.append('image_url', formData.image_url);
       }
-      
+
       let response;
-      
       if (isEditing) {
-        // Update existing blog
         response = await api.put(`/blogs/${editingBlog.id}`, submitData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
+          headers: { 'Content-Type': 'multipart/form-data' }
         });
       } else {
-        // Create new blog
         response = await api.post('/blogs', submitData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
+          headers: { 'Content-Type': 'multipart/form-data' }
         });
       }
-      
+
       if (response.data.success) {
         onSuccess();
         resetForm();
       } else {
         setErrors({ submit: response.data.message || 'Operation failed' });
       }
-      
     } catch (err) {
       console.error('Blog submission error:', err);
-      const errorMessage = err.response?.data?.message || 
-                          err.response?.data?.error || 
-                          'Failed to save blog. Please try again.';
+      const errorMessage =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        'Failed to save blog. Please try again.';
       setErrors({ submit: errorMessage });
     } finally {
       setLoading(false);
@@ -333,8 +387,7 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        
+      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
         {/* Modal Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-2xl font-semibold text-gray-900">
@@ -353,7 +406,6 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
 
         {/* Modal Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          
           {/* Global Error */}
           {errors.submit && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
@@ -362,10 +414,8 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
             {/* Left Column */}
             <div className="space-y-4">
-              
               {/* Title */}
               <div>
                 <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
@@ -425,7 +475,7 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
                   />
                   {errors.published_date && <p className="mt-1 text-sm text-red-600">{errors.published_date}</p>}
                 </div>
-                
+
                 <div>
                   <label htmlFor="published_time" className="block text-sm font-medium text-gray-700 mb-2">
                     Time *
@@ -447,17 +497,11 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
 
               {/* Image Upload */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Image
-                </label>
-                
+                <label className="block text-sm font-medium text-gray-700 mb-2">Featured Image</label>
+
                 {imagePreview ? (
                   <div className="relative">
-                    <img 
-                      src={imagePreview} 
-                      alt="Preview" 
-                      className="w-full h-48 object-cover rounded-md border"
-                    />
+                    <img src={imagePreview} alt="Preview" className="w-full h-48 object-cover rounded-md border" />
                     <button
                       type="button"
                       onClick={removeImage}
@@ -482,18 +526,13 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
                       className="hidden"
                       disabled={loading}
                     />
-                    <label
-                      htmlFor="image-upload"
-                      className="cursor-pointer text-black hover:text-gray-700"
-                    >
-                      Click to upload image
+                    <label htmlFor="image-upload" className="cursor-pointer text-black hover:text-gray-700">
+                      Click to upload featured image
                     </label>
-                    <p className="text-sm text-gray-500 mt-2">
-                      PNG, JPG, WebP up to 10MB
-                    </p>
+                    <p className="text-sm text-gray-500 mt-2">PNG, JPG, WebP up to 10MB</p>
                   </div>
                 )}
-                
+
                 {errors.image && <p className="mt-1 text-sm text-red-600">{errors.image}</p>}
               </div>
 
@@ -516,32 +555,165 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
 
             {/* Right Column */}
             <div className="space-y-4">
-              
-              {/* Content */}
+              {/* Content with toolbar */}
               <div>
-                <label htmlFor="content" className="block text-sm font-medium text-gray-700 mb-2">
-                  Content *
-                </label>
-                <textarea
-                  id="content"
-                  name="content"
-                  rows={8}
-                  value={formData.content}
-                  onChange={handleInputChange}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-black focus:border-black ${
-                    errors.content ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  placeholder="Write your blog content here..."
-                  disabled={loading}
-                />
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">Content *</label>
+
+                  <div className="flex bg-gray-100 rounded-md p-1">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMode(false)}
+                      className={`px-3 py-1 text-sm rounded transition-colors ${
+                        !previewMode ? 'bg-white text-black shadow-sm' : 'text-gray-600 hover:text-black'
+                      }`}
+                      disabled={loading}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMode(true)}
+                      className={`px-3 py-1 text-sm rounded transition-colors ${
+                        previewMode ? 'bg-white text-black shadow-sm' : 'text-gray-600 hover:text-black'
+                      }`}
+                      disabled={loading}
+                    >
+                      Preview
+                    </button>
+                  </div>
+                </div>
+
+                {!previewMode ? (
+                  <>
+                    {/* Toolbar */}
+                    <div className="border border-gray-300 rounded-t-md p-2 bg-gray-50 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => insertFormatting('<strong>', '</strong>')}
+                        className="px-2 py-1 text-sm bg-white border rounded hover:bg-gray-100"
+                        disabled={loading}
+                        title="Bold"
+                      >
+                        <strong>B</strong>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertFormatting('<em>', '</em>')}
+                        className="px-2 py-1 text-sm bg-white border rounded hover:bg-gray-100"
+                        disabled={loading}
+                        title="Italic"
+                      >
+                        <em>I</em>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertFormatting('<h1>', '</h1>')}
+                        className="px-2 py-1 text-sm bg-white border rounded hover:bg-gray-100"
+                        disabled={loading}
+                        title="Heading 1"
+                      >
+                        H1
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertFormatting('<h2>', '</h2>')}
+                        className="px-2 py-1 text-sm bg-white border rounded hover:bg-gray-100"
+                        disabled={loading}
+                        title="Heading 2"
+                      >
+                        H2
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertFormatting('<p>', '</p>')}
+                        className="px-2 py-1 text-sm bg-white border rounded hover:bg-gray-100"
+                        disabled={loading}
+                        title="Paragraph"
+                      >
+                        P
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertFormatting('<br>')}
+                        className="px-2 py-1 text-sm bg-white border rounded hover:bg-gray-100"
+                        disabled={loading}
+                        title="Line Break"
+                      >
+                        BR
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleImageUploadClick}
+                        className="px-2 py-1 text-sm bg-blue-500 text-white border rounded hover:bg-blue-600 flex items-center"
+                        disabled={loading || uploadingInlineImage}
+                        title="Upload Image"
+                      >
+                        {uploadingInlineImage ? (
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                        ) : (
+                          <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 002 2z"
+                            />
+                          </svg>
+                        )}
+                        Image
+                      </button>
+                    </div>
+
+                    {/* Simple Textarea */}
+                    <textarea
+                      ref={textareaRef}
+                      id="content"
+                      name="content"
+                      rows={12}
+                      value={formData.content}
+                      onChange={handleInputChange}
+                      className={`w-full border-l border-r border-b border-gray-300 rounded-b-md resize-none focus:outline-none focus:ring-2 focus:ring-black focus:border-black ${
+                        errors.content ? 'border-red-500' : ''
+                      }`}
+                      style={{
+                        fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+                        fontSize: '14px',
+                        lineHeight: '1.5',
+                        padding: '8px 12px'
+                      }}
+                      placeholder="Write your blog content here... You can use HTML tags like <strong>, <em>, <h1>, <img>, etc."
+                      disabled={loading}
+                    />
+
+                    {/* Helper text */}
+                    <p className="text-xs text-gray-500 mt-2">
+                      Use HTML tags for formatting. Click the toolbar buttons to insert common tags, or type them manually.
+                    </p>
+                  </>
+                ) : (
+                  /* Preview Mode */
+                  <div className="border border-gray-300 rounded-md p-4 bg-white min-h-[300px] max-h-[400px] overflow-y-auto">
+                    {formData.content ? (
+                      <div
+                        dangerouslySetInnerHTML={{ __html: formData.content }}
+                        className="prose prose-sm max-w-none"
+                        style={{
+                          lineHeight: '1.6',
+                          color: '#374151'
+                        }}
+                      />
+                    ) : (
+                      <p className="text-gray-500 italic">No content to preview. Switch to Edit mode to add content.</p>
+                    )}
+                  </div>
+                )}
                 {errors.content && <p className="mt-1 text-sm text-red-600">{errors.content}</p>}
               </div>
 
               {/* Tags */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Tags
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
                 <div className="flex space-x-2 mb-2">
                   <input
                     type="text"
@@ -563,10 +735,7 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {formData.tags.map((tag, index) => (
-                    <span
-                      key={index}
-                      className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm flex items-center"
-                    >
+                    <span key={index} className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm flex items-center">
                       {tag}
                       <button
                         type="button"
@@ -583,14 +752,12 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
 
               {/* Resource Links */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Resource Links
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Resource Links</label>
                 <div className="space-y-2 mb-2">
                   <input
                     type="text"
                     value={resourceInput.title}
-                    onChange={(e) => setResourceInput(prev => ({ ...prev, title: e.target.value }))}
+                    onChange={(e) => setResourceInput((prev) => ({ ...prev, title: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-black focus:border-black"
                     placeholder="Link title"
                     disabled={loading}
@@ -599,7 +766,7 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
                     <input
                       type="url"
                       value={resourceInput.url}
-                      onChange={(e) => setResourceInput(prev => ({ ...prev, url: e.target.value }))}
+                      onChange={(e) => setResourceInput((prev) => ({ ...prev, url: e.target.value }))}
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-black focus:border-black"
                       placeholder="https://example.com"
                       disabled={loading}
@@ -629,7 +796,12 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
                         disabled={loading}
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
                         </svg>
                       </button>
                     </div>

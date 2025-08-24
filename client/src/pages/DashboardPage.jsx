@@ -112,10 +112,59 @@ const DashboardPage = () => {
     }
   };
 
-  // Truncate text for display
-  const truncateText = (text, maxLength = 100) => {
-    if (!text) return '';
-    return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+  // Strip HTML tags and truncate text for preview
+  const truncateHtmlContent = (htmlContent, maxLength = 120) => {
+    if (!htmlContent) return '';
+    
+    // Create a temporary div to strip HTML tags
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlContent;
+    
+    // Get text content without HTML tags
+    const textContent = tempDiv.textContent || tempDiv.innerText || '';
+    
+    // Truncate the text
+    return textContent.length > maxLength 
+      ? textContent.substring(0, maxLength) + '...' 
+      : textContent;
+  };
+
+  // Sanitize HTML content for safe display
+  const sanitizeHtml = (htmlContent) => {
+    if (!htmlContent) return '';
+    
+    // Basic HTML sanitization - remove potentially dangerous tags
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlContent;
+    
+    // Remove script tags and other potentially dangerous elements
+    const scripts = tempDiv.querySelectorAll('script, object, embed, link, style');
+    scripts.forEach(script => script.remove());
+    
+    // Remove event handlers
+    const allElements = tempDiv.querySelectorAll('*');
+    allElements.forEach(element => {
+      // Remove all event handler attributes
+      for (let i = element.attributes.length - 1; i >= 0; i--) {
+        const attr = element.attributes[i];
+        if (attr.name.startsWith('on')) {
+          element.removeAttribute(attr.name);
+        }
+      }
+    });
+    
+    return tempDiv.innerHTML;
+  };
+
+  // Extract first image from HTML content for preview
+  const extractFirstImage = (htmlContent) => {
+    if (!htmlContent) return null;
+    
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlContent;
+    
+    const firstImg = tempDiv.querySelector('img');
+    return firstImg ? firstImg.src : null;
   };
 
   // Loading component
@@ -165,7 +214,7 @@ const DashboardPage = () => {
           <div>
             <h1 className="text-3xl font-bold text-white">Blog Management</h1>
             <p className="text-gray-400 mt-2">
-              Create, edit, and manage your blog posts
+              Create, edit, and manage your blog posts with rich content
             </p>
           </div>
           
@@ -215,107 +264,140 @@ const DashboardPage = () => {
             /* Blog grid */
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {blogs.map((blog) => (
-                  <div
-                    key={blog.id}
-                    className="bg-gray-50 rounded-lg overflow-hidden hover:shadow-md transition-shadow duration-200 group"
-                  >
-                    {/* Blog image */}
-                    <div className="h-48 bg-gray-200 relative overflow-hidden">
-                      {blog.image_url ? (
-                        <img
-                          src={blog.image_url}
-                          alt={blog.title}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTIxIDEwLjc1SDNDMi41ODU3OSAxMC43NSAyLjI1IDEwLjQxNDIgMi4yNSAxMFY2QzIuMjUgNC4zNDMxNSAzLjU5MzE1IDMgNS4yNSAzSDE4Ljc1QzIwLjQwNjkgMyAyMS43NSA0LjM0MzE1IDIxLjc1IDZWMTBDMjEuNzUgMTAuNDE0MiAyMS40MTQyIDEwLjc1IDIxIDEwLjc1WiIgZmlsbD0iIzlDQTNBRiIvPgo8L3N2Zz4K';
-                          }}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gray-300">
-                          <svg className="w-12 h-12 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
-                          </svg>
+                {blogs.map((blog) => {
+                  // Extract first inline image for additional preview
+                  const firstInlineImage = extractFirstImage(blog.content);
+                  // Use featured image first, then first inline image as fallback
+                  const displayImage = blog.image_url || firstInlineImage;
+                  
+                  return (
+                    <div
+                      key={blog.id}
+                      className="bg-gray-50 rounded-lg overflow-hidden hover:shadow-md transition-shadow duration-200 group"
+                    >
+                      {/* Blog image */}
+                      <div className="h-48 bg-gray-200 relative overflow-hidden">
+                        {displayImage ? (
+                          <img
+                            src={displayImage}
+                            alt={blog.title}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTIxIDEwLjc1SDNDMi41ODU3OSAxMC43NSAyLjI1IDEwLjQxNDIgMi4yNSAxMFY2QzIuMjUgNC4zNDMxNSAzLjU5MzE1IDMgNS4yNSAzSDE4Ljc1QzIwLjQwNjkgMyAyMS43NSA0LjM0MzE1IDIxLjc1IDZWMTBDMjEuNzUgMTAuNDE0MiAyMS40MTQyIDEwLjc1IDIxIDEwLjc1WiIgZmlsbD0iIzlDQTNBRiIvPgo8L3N2Zz4K';
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-gray-300">
+                            <svg className="w-12 h-12 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                        )}
+                        
+                        {/* Status badge */}
+                        <div className="absolute top-2 right-2">
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                            blog.is_published 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {blog.is_published ? 'Published' : 'Draft'}
+                          </span>
                         </div>
-                      )}
-                      
-                      {/* Status badge */}
-                      <div className="absolute top-2 right-2">
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          blog.is_published 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {blog.is_published ? 'Published' : 'Draft'}
-                        </span>
+
+                        {/* Content type indicator */}
+                        {blog.content && blog.content.includes('<img') && (
+                          <div className="absolute top-2 left-2">
+                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                              Rich Content
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Action buttons - show on hover */}
+                        <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center space-x-3">
+                          <button
+                            onClick={() => handleEdit(blog)}
+                            className="bg-white text-black px-3 py-2 rounded-md hover:bg-gray-200 transition-colors flex items-center space-x-1"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            <span>Edit</span>
+                          </button>
+                          <button
+                            onClick={() => handleDelete(blog.id, blog.title)}
+                            disabled={deleting === blog.id}
+                            className="bg-red-600 text-white px-3 py-2 rounded-md hover:bg-red-700 transition-colors flex items-center space-x-1 disabled:opacity-50"
+                          >
+                            {deleting === blog.id ? (
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                                <span>Delete</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
 
-                      {/* Action buttons - show on hover */}
-                      <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center space-x-3">
-                        <button
-                          onClick={() => handleEdit(blog)}
-                          className="bg-white text-black px-3 py-2 rounded-md hover:bg-gray-200 transition-colors flex items-center space-x-1"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                          <span>Edit</span>
-                        </button>
-                        <button
-                          onClick={() => handleDelete(blog.id, blog.title)}
-                          disabled={deleting === blog.id}
-                          className="bg-red-600 text-white px-3 py-2 rounded-md hover:bg-red-700 transition-colors flex items-center space-x-1 disabled:opacity-50"
-                        >
-                          {deleting === blog.id ? (
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                          ) : (
-                            <>
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                              <span>Delete</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Blog content */}
-                    <div className="p-4">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
-                        {blog.title}
-                      </h3>
-                      
-                      <p className="text-gray-600 text-sm mb-3 line-clamp-3">
-                        {truncateText(blog.content, 120)}
-                      </p>
-                      
-                      <div className="flex justify-between items-center text-xs text-gray-500">
-                        <span>By {blog.author}</span>
-                        <span>{formatDate(blog.published_date)}</span>
-                      </div>
-                      
-                      {/* Tags */}
-                      {blog.tags && blog.tags.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-1">
-                          {blog.tags.slice(0, 3).map((tag, index) => (
-                            <span
-                              key={index}
-                              className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded-md"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                          {blog.tags.length > 3 && (
-                            <span className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded-md">
-                              +{blog.tags.length - 3}
-                            </span>
-                          )}
+                      {/* Blog content */}
+                      <div className="p-4">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
+                          {blog.title}
+                        </h3>
+                        
+                        {/* Content preview - strip HTML and truncate */}
+                        <p className="text-gray-600 text-sm mb-3 line-clamp-3">
+                          {truncateHtmlContent(blog.content, 120)}
+                        </p>
+                        
+                        <div className="flex justify-between items-center text-xs text-gray-500">
+                          <span>By {blog.author}</span>
+                          <span>{formatDate(blog.published_date)}</span>
                         </div>
-                      )}
+                        
+                        {/* Content indicators */}
+                        <div className="mt-3 flex items-center justify-between">
+                          {/* Tags */}
+                          {blog.tags && blog.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {blog.tags.slice(0, 2).map((tag, index) => (
+                                <span
+                                  key={index}
+                                  className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded-md"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                              {blog.tags.length > 2 && (
+                                <span className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded-md">
+                                  +{blog.tags.length - 2}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Content type indicators */}
+                          <div className="flex items-center space-x-1 text-xs text-gray-400">
+                            {blog.content && blog.content.includes('<img') && (
+                              <span title="Contains images">🖼️</span>
+                            )}
+                            {blog.content && blog.content.includes('<a') && (
+                              <span title="Contains links">🔗</span>
+                            )}
+                            {blog.resource_links && blog.resource_links.length > 0 && (
+                              <span title="Has resource links">📎</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

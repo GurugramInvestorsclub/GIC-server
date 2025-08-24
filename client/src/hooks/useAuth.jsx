@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 
 // Configure axios base URL (adjust this to match your server)
-const API_BASE_URL = 'https://gic-server.onrender.com/api';
+const API_BASE_URL = 'http://localhost:3000/api';
 
 // Create axios instance with default config
 const api = axios.create({
@@ -213,26 +213,86 @@ export const useAuth = () => {
     return await checkAuthStatus();
   };
 
+  const uploadInlineImage = async (file) => {
+  try {
+    // Validate file input
+    if (!file) {
+      throw new Error('No file provided');
+    }
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedTypes.includes(file.type)) {
+      throw new Error('Invalid file type. Please select a valid image file (JPEG, PNG, WebP, or GIF)');
+    }
+
+    // Validate file size (10MB max)
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      throw new Error('File size too large. Maximum allowed: 10MB');
+    }
+
+    console.log('Uploading inline image:', file.name, file.size, file.type);
+
+    // Prepare form data
+    const formData = new FormData();
+    formData.append('image', file);
+
+    // Make API request
+    const response = await api.post('/blogs/upload-inline-image', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+
+    console.log('Inline image upload response:', response.data);
+
+    if (response.data.success) {
+      return {
+        success: true,
+        imageUrl: response.data.data.imageUrl,
+        fileName: response.data.data.fileName,
+        message: 'Image uploaded successfully'
+      };
+    } else {
+      throw new Error(response.data.message || 'Upload failed');
+    }
+
+  } catch (error) {
+    console.error('Inline image upload error:', error);
+    
+    const errorMessage = error.response?.data?.message || 
+                        error.message || 
+                        'Failed to upload image. Please try again.';
+    
+    return {
+      success: false,
+      message: errorMessage
+    };
+  }
+};
+
   // Return hook interface
   return {
-    // State
-    user,
-    loading,
-    error,
-    
-    // Functions
-    login,
-    logout,
-    isAuthenticated,
-    getCurrentUser,
-    getToken,
-    checkAuthStatus,
-    clearError,
-    refreshAuth,
-    
-    // Axios instance for API calls
-    api
-  };
+  // State
+  user,
+  loading,
+  error,
+  
+  // Functions
+  login,
+  logout,
+  isAuthenticated,
+  getCurrentUser,
+  getToken,
+  checkAuthStatus,
+  clearError,
+  refreshAuth,
+  uploadInlineImage, 
+  
+  // Axios instance for API calls
+  api
+};
 };
 
 // Export axios instance for use in other components
