@@ -68,7 +68,7 @@ export const useAuth = () => {
 
     try {
       const token = getToken();
-      
+
       if (!token) {
         setUser(null);
         setLoading(false);
@@ -77,9 +77,7 @@ export const useAuth = () => {
 
       // Verify token with server
       const response = await api.post('/auth/verify', {}, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
 
       if (response.data.success) {
@@ -87,7 +85,6 @@ export const useAuth = () => {
         setLoading(false);
         return true;
       } else {
-        // Token is invalid, remove it
         removeToken();
         setUser(null);
         setLoading(false);
@@ -95,7 +92,6 @@ export const useAuth = () => {
       }
     } catch (error) {
       console.error('Auth check failed:', error);
-      // If token verification fails, remove invalid token
       removeToken();
       setUser(null);
       setError('Authentication verification failed');
@@ -110,192 +106,96 @@ export const useAuth = () => {
     setError(null);
 
     try {
-      // Validate inputs
       if (!email || !password) {
         throw new Error('Email and password are required');
       }
 
-      console.log('Making login request...'); // Debug log
-
-      // Make login request
       const response = await api.post('/auth/login', {
         email: email.trim(),
-        password: password
+        password
       });
-
-      console.log('Login response:', response.data); // Debug log
 
       if (response.data.success) {
         const { token, user } = response.data.data;
-        
-        console.log('Token received:', token); // Debug log
-        console.log('User data:', user); // Debug log
-        
-        // Save token and user data
         saveToken(token);
         setUser(user);
         setLoading(false);
-        
-        console.log('Login successful, user set'); // Debug log
-        
-        return {
-          success: true,
-          message: 'Login successful',
-          user: user
-        };
+        return { success: true, message: 'Login successful', user };
       } else {
         throw new Error(response.data.message || 'Login failed');
       }
     } catch (error) {
       console.error('Login error:', error);
-      console.log('Login response data:', error.response?.data); // Debug log
-      
-      const errorMessage = error.response?.data?.message || 
-                          error.message || 
-                          'Login failed. Please try again.';
-      
+      const errorMessage = error.response?.data?.message || error.message || 'Login failed. Please try again.';
       setError(errorMessage);
       setLoading(false);
-      
-      return {
-        success: false,
-        message: errorMessage
-      };
+      return { success: false, message: errorMessage };
     }
   };
 
   // Logout function
   const logout = () => {
-  try {
-    // Clear token and user data
-    removeToken();
-    setUser(null);
-    setError(null);
-    
-    // Remove authorization header
-    delete api.defaults.headers.common['Authorization'];
-    
-    // Force page reload to trigger authentication check and redirect
-    window.location.href = '/login';
-    
-    return {
-      success: true,
-      message: 'Logged out successfully'
-    };
-  } catch (error) {
-    console.error('Logout error:', error);
-    // Even if there's an error, redirect to login
-    window.location.href = '/login';
-    return {
-      success: false,
-      message: 'Error during logout'
-    };
-  }
-};
-
-  // Check if user is authenticated
-  const isAuthenticated = () => {
-    return !!user && !!getToken();
+    try {
+      removeToken();
+      setUser(null);
+      setError(null);
+      delete api.defaults.headers.common['Authorization'];
+      window.location.href = '/login';
+      return { success: true, message: 'Logged out successfully' };
+    } catch (error) {
+      console.error('Logout error:', error);
+      window.location.href = '/login';
+      return { success: false, message: 'Error during logout' };
+    }
   };
 
-  // Get current user
-  const getCurrentUser = () => {
-    return user;
-  };
-
-  // Clear error
-  const clearError = () => {
-    setError(null);
-  };
-
-  // Force refresh authentication
-  const refreshAuth = async () => {
-    return await checkAuthStatus();
-  };
-
+  // Upload inline image
   const uploadInlineImage = async (file) => {
-  try {
-    // Validate file input
-    if (!file) {
-      throw new Error('No file provided');
-    }
+    try {
+      if (!file) throw new Error('No file provided');
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+      if (!allowedTypes.includes(file.type)) throw new Error('Invalid file type');
+      if (file.size > 10 * 1024 * 1024) throw new Error('File size too large. Max 10MB');
 
-    // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
-    if (!allowedTypes.includes(file.type)) {
-      throw new Error('Invalid file type. Please select a valid image file (JPEG, PNG, WebP, or GIF)');
-    }
+      const formData = new FormData();
+      formData.append('image', file);
 
-    // Validate file size (10MB max)
-    const maxSize = 10 * 1024 * 1024;
-    if (file.size > maxSize) {
-      throw new Error('File size too large. Maximum allowed: 10MB');
-    }
+      const response = await api.post('/blogs/upload-inline-image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
 
-    console.log('Uploading inline image:', file.name, file.size, file.type);
-
-    // Prepare form data
-    const formData = new FormData();
-    formData.append('image', file);
-
-    // Make API request
-    const response = await api.post('/blogs/upload-inline-image', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
+      if (response.data.success) {
+        return {
+          success: true,
+          imageUrl: response.data.data.imageUrl,
+          fileName: response.data.data.fileName,
+        };
+      } else {
+        throw new Error(response.data.message || 'Upload failed');
       }
-    });
-
-    console.log('Inline image upload response:', response.data);
-
-    if (response.data.success) {
-      return {
-        success: true,
-        imageUrl: response.data.data.imageUrl,
-        fileName: response.data.data.fileName,
-        message: 'Image uploaded successfully'
-      };
-    } else {
-      throw new Error(response.data.message || 'Upload failed');
+    } catch (error) {
+      console.error('Inline image upload error:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to upload image.';
+      return { success: false, message: errorMessage };
     }
+  };
 
-  } catch (error) {
-    console.error('Inline image upload error:', error);
-    
-    const errorMessage = error.response?.data?.message || 
-                        error.message || 
-                        'Failed to upload image. Please try again.';
-    
-    return {
-      success: false,
-      message: errorMessage
-    };
-  }
-};
-
-  // Return hook interface
   return {
-  // State
-  user,
-  loading,
-  error,
-  
-  // Functions
-  login,
-  logout,
-  isAuthenticated,
-  getCurrentUser,
-  getToken,
-  checkAuthStatus,
-  clearError,
-  refreshAuth,
-  uploadInlineImage, 
-  
-  // Axios instance for API calls
-  api
-};
+    user,
+    loading,
+    error,
+    login,
+    logout,
+    isAuthenticated: () => !!user && !!getToken(),
+    getCurrentUser: () => user,
+    getToken,
+    checkAuthStatus,
+    clearError: () => setError(null),
+    refreshAuth: checkAuthStatus,
+    uploadInlineImage,
+    api,
+  };
 };
 
-// Export axios instance for use in other components
+// Export axios instance for reuse
 export { api };
-
-export default useAuth;
