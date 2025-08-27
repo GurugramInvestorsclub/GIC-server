@@ -75,6 +75,19 @@ const handleMulterError = (error, req, res, next) => {
     next(error);
 };
 
+// Conditional multer middleware - only parse multipart if Content-Type indicates file upload
+const conditionalUpload = (req, res, next) => {
+    const contentType = req.get('Content-Type');
+    
+    // If multipart/form-data, use multer
+    if (contentType && contentType.includes('multipart/form-data')) {
+        return upload.single('image')(req, res, next);
+    } else {
+        // Otherwise, skip multer and continue
+        return next();
+    }
+};
+
 // Public Routes (no authentication required)
 
 // GET /api/blogs - Get all published blogs with optional filtering
@@ -90,17 +103,22 @@ router.get('/:slug', optionalAuth, getBlogBySlug);
 
 // Protected Routes (authentication required)
 
+// POST /api/blogs/upload-inline-image - Upload inline image for rich text editor
+// Requires: image file
+// Content-Type: multipart/form-data
+router.post('/upload-inline-image', requireAuth, upload.single('image'), handleMulterError, uploadInlineImage);
+
 // POST /api/blogs - Create new blog
 // Requires: title, content, author
 // Optional: image (file upload) OR image_url, published_date, published_time, tags, resource_links, is_published
 // Content-Type: multipart/form-data (for file upload) OR application/json (for URL only)
-router.post('/upload-inline-image', requireAuth, upload.single('image'), handleMulterError, uploadInlineImage);
+router.post('/', requireAuth, conditionalUpload, handleMulterError, createBlog);
 
 // PUT /api/blogs/:id - Update existing blog
 // All fields are optional, only provided fields will be updated
 // Supports both file upload and URL for image updates
 // Content-Type: multipart/form-data (for file upload) OR application/json (for other updates)
-router.put('/:id', requireAuth, upload.single('image'), handleMulterError, updateBlog);
+router.put('/:id', requireAuth, conditionalUpload, handleMulterError, updateBlog);
 
 // DELETE /api/blogs/:id - Delete blog
 router.delete('/:id', requireAuth, deleteBlog);
@@ -120,14 +138,14 @@ router.use((req, res) => {
                 'POST /api/blogs - Create blog (requires auth, supports file upload)',
                 'PUT /api/blogs/:id - Update blog (requires auth, supports file upload)',
                 'DELETE /api/blogs/:id - Delete blog (requires auth)',
-                'POST /api/blogs/upload-inline-image - Upload inline image (requires auth)'  // Add this line
+                'POST /api/blogs/upload-inline-image - Upload inline image (requires auth)'
             ]
         },
         fileUploadInfo: {
             fieldName: 'image',
             maxSize: `${MAX_FILE_SIZE / (1024 * 1024)}MB`,
             allowedTypes: Object.keys(ALLOWED_FILE_TYPES),
-            contentType: 'multipart/form-data'
+            contentType: 'multipart/form-data OR application/json'
         }
     });
 });
