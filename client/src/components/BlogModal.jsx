@@ -73,9 +73,9 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
       is_published: !!blog.is_published,
     });
 
-    // Load content into editor and clean up any problematic inline styles
+    // Load content into editor and ensure all images are centered
     if (editorRef.current) {
-      editorRef.current.innerHTML = cleanupInlineStyles(content);
+      editorRef.current.innerHTML = ensureAllImagesAreCentered(content);
     }
 
     setImagePreview(blog.image_url || null);
@@ -110,26 +110,16 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
     setSelectedImage(null);
   };
 
-  // FIXED: Preserve existing styles exactly like BlogDetailPage does
-  const cleanupInlineStyles = (htmlContent) => {
+  // Ensure ALL images are always centered
+  const ensureAllImagesAreCentered = (htmlContent) => {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = htmlContent;
     
     const images = tempDiv.querySelectorAll('img');
     images.forEach(img => {
-      // Don't modify existing styles - preserve them exactly as they are
-      const currentStyle = img.getAttribute('style') || '';
-      
-      // Only add data attributes for button functionality, don't change the visual styles
-      let alignment = 'center';
+      // Determine size from existing styles
       let size = '400px';
-      
-      // Parse existing styles to set data attributes
-      if (currentStyle.includes('float: left') || currentStyle.includes('float:left')) {
-        alignment = 'left';
-      } else if (currentStyle.includes('float: right') || currentStyle.includes('float:right')) {
-        alignment = 'right';
-      }
+      const currentStyle = img.getAttribute('style') || '';
       
       // Extract size from existing max-width or width
       const maxWidthMatch = currentStyle.match(/max-width:\s*(\d+)px/);
@@ -147,42 +137,44 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
         else size = '580px';
       }
       
-      // Set data attributes for button controls without changing visual appearance
-      img.dataset.alignment = alignment;
-      img.dataset.currentSize = size;
+      // Remove the image from its current position
+      const parent = img.parentNode;
       
-      // Add click handler class if not present
-      if (!img.classList.contains('editor-image-preserved')) {
-        img.classList.add('editor-image-preserved');
-      }
+      // Create centered wrapper
+      const wrapper = document.createElement('div');
+      wrapper.className = 'image-center-wrapper';
+      wrapper.style.cssText = `
+        text-align: center !important;
+        margin: 20px 0 !important;
+        clear: both !important;
+        width: 100% !important;
+        display: block !important;
+      `;
+      
+      // Apply centered styles to image
+      img.style.cssText = `
+        max-width: ${size} !important;
+        height: auto !important;
+        display: inline-block !important;
+        margin: 0 !important;
+        border-radius: 8px !important;
+        vertical-align: top !important;
+        float: none !important;
+      `;
+      
+      // Set data attributes
+      img.dataset.currentSize = size;
+      img.dataset.alignment = 'center';
+      
+      // Add click handler class
+      img.classList.add('editor-image-centered');
+      
+      // Wrap the image
+      parent.insertBefore(wrapper, img);
+      wrapper.appendChild(img);
     });
     
     return tempDiv.innerHTML;
-  };
-
-  // Convert inline styles to semantic CSS classes
-  const getImageClassFromStyle = (styleAttr) => {
-    let classes = 'editor-image';
-    
-    if (styleAttr.includes('float: left')) {
-      classes += ' image-align-left';
-    } else if (styleAttr.includes('float: right')) {
-      classes += ' image-align-right';
-    } else {
-      classes += ' image-align-center';
-    }
-    
-    if (styleAttr.includes('width: 200px')) {
-      classes += ' image-size-small';
-    } else if (styleAttr.includes('width: 400px')) {
-      classes += ' image-size-medium';
-    } else if (styleAttr.includes('width: 600px')) {
-      classes += ' image-size-large';
-    } else {
-      classes += ' image-size-medium'; // default
-    }
-    
-    return classes;
   };
 
   const handleEditorChange = () => {
@@ -201,7 +193,8 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
     document.execCommand(command, false, value);
     editorRef.current?.focus();
   }
-  // FIXED: Add delete image functionality
+
+  // Delete image functionality
   const deleteImage = () => {
     if (!selectedImage) {
       alert('Please click on an image first');
@@ -209,13 +202,19 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
     }
     
     if (confirm('Are you sure you want to delete this image?')) {
-      selectedImage.remove();
+      // Remove wrapper if exists
+      const wrapper = selectedImage.closest('.image-center-wrapper');
+      if (wrapper) {
+        wrapper.remove();
+      } else {
+        selectedImage.remove();
+      }
       setSelectedImage(null);
       handleEditorChange();
     }
   };
 
-  // FIXED: Insert image function with proper containment
+  // Insert image function - ALWAYS CENTERED
   const insertImage = async () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -228,20 +227,33 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
       try {
         const upload = await uploadInlineImage(file);
         if (upload?.success) {
+          // Create centered wrapper
+          const wrapper = document.createElement('div');
+          wrapper.className = 'image-center-wrapper';
+          wrapper.style.cssText = `
+            text-align: center !important;
+            margin: 20px 0 !important;
+            clear: both !important;
+            width: 100% !important;
+            display: block !important;
+          `;
+          
           const img = document.createElement('img');
           img.src = upload.imageUrl;
           
-          // Apply default styles for new images
+          // Apply centered styles
           img.style.cssText = `
             max-width: 400px !important;
             height: auto !important;
-            display: block !important;
-            margin: 20px auto !important;
+            display: inline-block !important;
+            margin: 0 !important;
             border-radius: 8px !important;
-            clear: both !important;
+            vertical-align: top !important;
+            float: none !important;
           `;
-          img.dataset.alignment = 'center';
           img.dataset.currentSize = '400px';
+          img.dataset.alignment = 'center';
+          img.classList.add('editor-image-centered');
           
           // Add click handler for selection
           img.onclick = (e) => {
@@ -249,16 +261,19 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
             selectImage(img);
           };
           
+          // Wrap and insert
+          wrapper.appendChild(img);
+          
           // Insert at cursor or end of content
           const selection = window.getSelection();
           if (selection.rangeCount > 0) {
             const range = selection.getRangeAt(0);
-            range.insertNode(img);
+            range.insertNode(wrapper);
             
-            // Add paragraph after image for better text flow
+            // Add paragraph after image
             const paragraph = document.createElement('p');
             paragraph.innerHTML = '<br>';
-            range.setStartAfter(img);
+            range.setStartAfter(wrapper);
             range.insertNode(paragraph);
             
             // Position cursor in the new paragraph
@@ -267,7 +282,7 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
             selection.removeAllRanges();
             selection.addRange(range);
           } else {
-            editorRef.current.appendChild(img);
+            editorRef.current.appendChild(wrapper);
             const paragraph = document.createElement('p');
             paragraph.innerHTML = '<br>';
             editorRef.current.appendChild(paragraph);
@@ -286,7 +301,7 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
     input.click();
   };
 
-  // FIXED: Image selection function
+  // Image selection function
   const selectImage = (img) => {
     // Remove previous selection highlighting
     const allImages = editorRef.current.querySelectorAll('img');
@@ -297,113 +312,23 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
     setSelectedImage(img);
   };
 
-  // FIXED: Image alignment functions with direct styles that actually work
-  const alignImageLeft = () => {
-    if (!selectedImage) {
-      alert('Please click on an image first');
-      return;
-    }
-    
-    // Apply direct styles with !important to override everything
-    selectedImage.style.cssText = `
-      float: left !important;
-      margin: 10px 20px 20px 0 !important;
-      max-width: ${selectedImage.dataset.currentSize || '400px'} !important;
-      height: auto !important;
-      display: block !important;
-      clear: left !important;
-      border-radius: 8px !important;
-    `;
-    selectedImage.dataset.alignment = 'left';
-    
-    handleEditorChange();
-  };
-
-  const alignImageCenter = () => {
-    if (!selectedImage) {
-      alert('Please click on an image first');
-      return;
-    }
-    
-    // Apply direct styles with !important
-    selectedImage.style.cssText = `
-      float: none !important;
-      margin: 20px auto !important;
-      max-width: ${selectedImage.dataset.currentSize || '400px'} !important;
-      height: auto !important;
-      display: block !important;
-      clear: both !important;
-      border-radius: 8px !important;
-    `;
-    selectedImage.dataset.alignment = 'center';
-    
-    handleEditorChange();
-  };
-
-  const alignImageRight = () => {
-    if (!selectedImage) {
-      alert('Please click on an image first');
-      return;
-    }
-    
-    // Apply direct styles with !important
-    selectedImage.style.cssText = `
-      float: right !important;
-      margin: 10px 0 20px 20px !important;
-      max-width: ${selectedImage.dataset.currentSize || '400px'} !important;
-      height: auto !important;
-      display: block !important;
-      clear: right !important;
-      border-radius: 8px !important;
-    `;
-    selectedImage.dataset.alignment = 'right';
-    
-    handleEditorChange();
-  };
-
-  // FIXED: Image resize functions with direct styles that actually work
+  // Size functions - ALWAYS MAINTAIN CENTER ALIGNMENT
   const resizeImageSmall = () => {
     if (!selectedImage) {
       alert('Please click on an image first');
       return;
     }
     
-    const currentAlignment = selectedImage.dataset.alignment || 'center';
+    selectedImage.style.cssText = `
+      max-width: 250px !important;
+      height: auto !important;
+      display: inline-block !important;
+      margin: 0 !important;
+      border-radius: 8px !important;
+      vertical-align: top !important;
+      float: none !important;
+    `;
     selectedImage.dataset.currentSize = '250px';
-    
-    // Reapply current alignment with new size
-    if (currentAlignment === 'left') {
-      selectedImage.style.cssText = `
-        float: left !important;
-        margin: 10px 20px 20px 0 !important;
-        max-width: 250px !important;
-        height: auto !important;
-        display: block !important;
-        clear: left !important;
-        border-radius: 8px !important;
-      `;
-    } else if (currentAlignment === 'right') {
-      selectedImage.style.cssText = `
-        float: right !important;
-        margin: 10px 0 20px 20px !important;
-        max-width: 250px !important;
-        height: auto !important;
-        display: block !important;
-        clear: right !important;
-        border-radius: 8px !important;
-      `;
-    } else {
-      selectedImage.style.cssText = `
-        float: none !important;
-        margin: 20px auto !important;
-        max-width: 250px !important;
-        height: auto !important;
-        display: block !important;
-        clear: both !important;
-        border-radius: 8px !important;
-      `;
-    }
-    
     handleEditorChange();
   };
 
@@ -413,42 +338,16 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
       return;
     }
     
-    const currentAlignment = selectedImage.dataset.alignment || 'center';
+    selectedImage.style.cssText = `
+      max-width: 400px !important;
+      height: auto !important;
+      display: inline-block !important;
+      margin: 0 !important;
+      border-radius: 8px !important;
+      vertical-align: top !important;
+      float: none !important;
+    `;
     selectedImage.dataset.currentSize = '400px';
-    
-    // Reapply current alignment with new size
-    if (currentAlignment === 'left') {
-      selectedImage.style.cssText = `
-        float: left !important;
-        margin: 10px 20px 20px 0 !important;
-        max-width: 400px !important;
-        height: auto !important;
-        display: block !important;
-        clear: left !important;
-        border-radius: 8px !important;
-      `;
-    } else if (currentAlignment === 'right') {
-      selectedImage.style.cssText = `
-        float: right !important;
-        margin: 10px 0 20px 20px !important;
-        max-width: 400px !important;
-        height: auto !important;
-        display: block !important;
-        clear: right !important;
-        border-radius: 8px !important;
-      `;
-    } else {
-      selectedImage.style.cssText = `
-        float: none !important;
-        margin: 20px auto !important;
-        max-width: 400px !important;
-        height: auto !important;
-        display: block !important;
-        clear: both !important;
-        border-radius: 8px !important;
-      `;
-    }
-    
     handleEditorChange();
   };
 
@@ -458,42 +357,16 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
       return;
     }
     
-    const currentAlignment = selectedImage.dataset.alignment || 'center';
+    selectedImage.style.cssText = `
+      max-width: 580px !important;
+      height: auto !important;
+      display: inline-block !important;
+      margin: 0 !important;
+      border-radius: 8px !important;
+      vertical-align: top !important;
+      float: none !important;
+    `;
     selectedImage.dataset.currentSize = '580px';
-    
-    // Reapply current alignment with new size
-    if (currentAlignment === 'left') {
-      selectedImage.style.cssText = `
-        float: left !important;
-        margin: 10px 20px 20px 0 !important;
-        max-width: 580px !important;
-        height: auto !important;
-        display: block !important;
-        clear: left !important;
-        border-radius: 8px !important;
-      `;
-    } else if (currentAlignment === 'right') {
-      selectedImage.style.cssText = `
-        float: right !important;
-        margin: 10px 0 20px 20px !important;
-        max-width: 580px !important;
-        height: auto !important;
-        display: block !important;
-        clear: right !important;
-        border-radius: 8px !important;
-      `;
-    } else {
-      selectedImage.style.cssText = `
-        float: none !important;
-        margin: 20px auto !important;
-        max-width: 580px !important;
-        height: auto !important;
-        display: block !important;
-        clear: both !important;
-        border-radius: 8px !important;
-      `;
-    }
-    
     handleEditorChange();
   };
 
@@ -577,7 +450,7 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
     }
   };
 
-  // FIXED: Setup click handlers for both new and preserved images
+  // Setup click handlers for image selection
   useEffect(() => {
     if (editorRef.current) {
       const handleImageClick = (e) => {
@@ -619,6 +492,44 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
             {isEditing ? 'Edit Blog Post' : 'Create New Blog Post'}
           </h2>
 
+          <div>
+                    <span className="text-xs font-medium text-blue-800 block mb-2">Size (All images are automatically centered):</span>
+                    <div className="flex space-x-2">
+                      <button
+                        type="button"
+                        onClick={resizeImageSmall}
+                        className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                      >
+                        Small (250px)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={resizeImageMedium}
+                        className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                      >
+                        Medium (400px)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={resizeImageLarge}
+                        className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                      >
+                        Large (580px)
+                      </button>
+
+                      <button type="button" onClick={insertImage} className="px-3 py-1 text-sm bg-blue-500 text-white border rounded hover:bg-blue-600">
+                    📷 Add Image
+                  </button>
+                   <button
+                      type="button"
+                      onClick={deleteImage}
+                      className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                    >
+                      🗑️ Delete Image
+                    </button>
+                    </div>
+                  </div>
+
           <div className="flex items-center space-x-3">
             <button
               type="button"
@@ -652,6 +563,7 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
+            
           </div>
         </div>
 
@@ -814,73 +726,24 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
                 </div>
               )}
 
-              {/* Custom Toolbar */}
-              <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
+              {/* Simple Toolbar */}
+              {/* <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
                 <div className="flex flex-wrap gap-2">
-                  {/* <button type="button" onClick={() => execCommand('bold')} className="px-3 py-1 text-sm bg-white border rounded hover:bg-gray-50">
-                    <strong>B</strong>
-                  </button>
-                  <button type="button" onClick={() => execCommand('italic')} className="px-3 py-1 text-sm bg-white border rounded hover:bg-gray-50">
-                    <em>I</em>
-                  </button>
-                  <button type="button" onClick={() => execCommand('underline')} className="px-3 py-1 text-sm bg-white border rounded hover:bg-gray-50">
-                    <u>U</u>
-                  </button>
-                  <button type="button" onClick={() => execCommand('formatBlock', 'h1')} className="px-3 py-1 text-sm bg-white border rounded hover:bg-gray-50">
-                    H1
-                  </button>
-                  <button type="button" onClick={() => execCommand('formatBlock', 'h2')} className="px-3 py-1 text-sm bg-white border rounded hover:bg-gray-50">
-                    H2
-                  </button>
-                  <button type="button" onClick={() => execCommand('insertUnorderedList')} className="px-3 py-1 text-sm bg-white border rounded hover:bg-gray-50">
-                    • List
-                  </button>
-                  <button type="button" onClick={() => execCommand('insertOrderedList')} className="px-3 py-1 text-sm bg-white border rounded hover:bg-gray-50">
-                    1. List
-                  </button> */}
                   <button type="button" onClick={insertImage} className="px-3 py-1 text-sm bg-blue-500 text-white border rounded hover:bg-blue-600">
-                    📷 Image
+                    📷 Add Image
                   </button>
                 </div>
-              </div>
+              </div> */}
 
-              {/* Custom Image Controls */}
-              <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              {/* Simplified Image Controls */}
+              {/* <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
                 <h4 className="text-sm font-medium text-blue-900 mb-3">Image Controls</h4>
-                <p className="text-xs text-blue-700 mb-3">Click on an image in the editor, then use these buttons:</p>
+                <p className="text-xs text-blue-700 mb-3">Click on an image in the editor, then use these buttons:</p> */}
                 
-                <div className="space-y-3">
-                  {/* Alignment Controls */}
-                  <div>
-                    <span className="text-xs font-medium text-blue-800 block mb-2">Alignment:</span>
-                    <div className="flex space-x-2">
-                      <button
-                        type="button"
-                        onClick={alignImageLeft}
-                        className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                      >
-                        ← Left
-                      </button>
-                      <button
-                        type="button"
-                        onClick={alignImageCenter}
-                        className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                      >
-                        ⬛ Center
-                      </button>
-                      <button
-                        type="button"
-                        onClick={alignImageRight}
-                        className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                      >
-                        Right →
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Size Controls */}
-                  <div>
-                    <span className="text-xs font-medium text-blue-800 block mb-2">Size:</span>
+                {/* <div className="space-y-3"> */}
+                  {/* Size Controls Only */}
+                  {/* <div>
+                    <span className="text-xs font-medium text-blue-800 block mb-2">Size (All images are automatically centered):</span>
                     <div className="flex space-x-2">
                       <button
                         type="button"
@@ -904,10 +767,10 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
                         Large (580px)
                       </button>
                     </div>
-                  </div>
+                  </div> */}
 
                   {/* Delete Control */}
-                  <div>
+                  {/* <div>
                     <span className="text-xs font-medium text-blue-800 block mb-2">Remove:</span>
                     <button
                       type="button"
@@ -916,11 +779,11 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
                     >
                       🗑️ Delete Image
                     </button>
-                  </div>
-                </div>
-              </div>
+                  </div> */}
+                {/* </div> */}
+              {/* </div> */}
 
-              {/* FIXED: Custom Rich Text Editor with proper containment */}
+              {/* Rich Text Editor */}
               <div className="mb-16">
                 <div className="max-w-[680px] mx-auto">
                   <div 
@@ -946,7 +809,7 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
         </div>
       </div>
 
-      {/* FIXED: Custom Editor Styles with proper image containment */}
+      {/* Enhanced CSS for auto-centered images */}
       <style>{`
         .custom-editor:empty::before {
           content: attr(data-placeholder);
@@ -954,15 +817,17 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
           pointer-events: none;
         }
         
-        /* Base image styles - contained within editor */
-        .custom-editor .editor-image {
+        /* Force ALL images to be centered */
+        .custom-editor img {
           max-width: 100%;
           height: auto;
-          display: block;
+          display: inline-block;
           border-radius: 8px;
           cursor: pointer;
           transition: all 0.2s ease;
-          box-sizing: border-box;
+          margin: 0 !important;
+          float: none !important;
+          vertical-align: top;
         }
         
         /* Image selection highlight */
@@ -971,47 +836,13 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
           outline-offset: 2px;
         }
         
-        /* Image alignment classes */
-        .custom-editor .image-align-left {
-          float: left;
-          margin: 10px 20px 20px 0;
-          clear: left;
-        }
-        
-        .custom-editor .image-align-center {
-          float: none;
-          margin: 20px auto;
-          display: block;
-          clear: both;
-        }
-        
-        .custom-editor .image-align-right {
-          float: right;
-          margin: 10px 0 20px 20px;
-          clear: right;
-        }
-        
-        /* Image size classes - responsive and contained */
-        .custom-editor .image-size-small {
-          max-width: min(250px, 100%);
-          width: auto;
-        }
-        
-        .custom-editor .image-size-medium {
-          max-width: min(400px, 100%);
-          width: auto;
-        }
-        
-        .custom-editor .image-size-large {
-          max-width: min(580px, 100%);
-          width: auto;
-        }
-        
-        /* Ensure text flows properly around images */
-        .custom-editor p:after {
-          content: "";
-          display: table;
-          clear: both;
+        /* Centered wrapper for all images */
+        .custom-editor .image-center-wrapper {
+          text-align: center !important;
+          margin: 20px 0 !important;
+          clear: both !important;
+          width: 100% !important;
+          display: block !important;
         }
         
         /* Other editor styles */
@@ -1039,22 +870,11 @@ const BlogModal = ({ isOpen, onClose, onSuccess, editingBlog = null }) => {
           margin-bottom: 0.5rem;
         }
         
-        /* Responsive behavior for mobile */
-        @media (max-width: 640px) {
-          .custom-editor .image-align-left,
-          .custom-editor .image-align-right {
-            float: none;
-            margin: 20px auto;
-            display: block;
-            clear: both;
-          }
-          
-          .custom-editor .image-size-small,
-          .custom-editor .image-size-medium,
-          .custom-editor .image-size-large {
-            max-width: 100%;
-            width: 100%;
-          }
+        /* Ensure proper clearfix */
+        .custom-editor p:after {
+          content: "";
+          display: table;
+          clear: both;
         }
       `}</style>
     </div>

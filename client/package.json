@@ -12,6 +12,7 @@
   "dependencies": {
     "@enzedonline/quill-blot-formatter2": "^3.0.0",
     "axios": "^1.11.0",
+    "quill-image-resize-module-react": "^3.0.0",
     "quill-resize-image": "^1.0.11",
     "react": "18.2.0",
     "react-dom": "18.2.0",
